@@ -6,7 +6,7 @@ const provider = new ethers.JsonRpcProvider(process.env.RPC || 'http://localhost
 const port = process.env.PORT || 8080
 
 const feeContractAddresses = {
-  17000: '0x272347F941fb5f35854D8f5DbDcEdef1A515dB41'
+  17000: {address: '0x272347F941fb5f35854D8f5DbDcEdef1A515dB41', deployBlockNumber: 1091372}
 }
 
 const acceptedTokensByChain = {
@@ -30,19 +30,21 @@ const MAX_QUERY_RANGE = 10000
 
 const finalizedBlockNumber = await provider.getBlock('finalized').then(b => b.number)
 
-for (const [chainId, address] of Object.entries(feeContractAddresses)) {
+for (const [chainId, {address, deployBlockNumber}] of Object.entries(feeContractAddresses)) {
   const feeContract = new ethers.Contract(address, feeContractAbi, provider)
   feeContracts[chainId] = feeContract
   const acceptedTokens = acceptedTokensByChain[chainId]
   acceptedTokens.current.add(await feeContract.weth())
   acceptedTokens.ever.add(await feeContract.weth())
+  acceptedTokens.blockNumber = deployBlockNumber
   while (acceptedTokens.blockNumber < finalizedBlockNumber) {
     const min = acceptedTokens.blockNumber
     const max = Math.min(min + MAX_QUERY_RANGE, finalizedBlockNumber)
     await feeContract.queryFilter('SetToken', min, max).then(logs => {
       for (const {transactionHash, transactionIndex, args} of logs) {
-        if (!acceptedTokens.includedLogs.has(`${transactionHash}:${transactionIndex}`)) {
-          acceptedTokens.includedLogs.add(`${transactionHash}:${transactionIndex}`)
+        const logId = `${transactionHash}:${transactionIndex}`
+        if (!acceptedTokens.includedLogs.has(logId)) {
+          acceptedTokens.includedLogs.add(logId)
           acceptedTokens.current[args.accepted ? 'add' : 'delete'](args.token)
           if (args.accepted) acceptedTokens.ever.add(args.token)
         }
@@ -51,6 +53,29 @@ for (const [chainId, address] of Object.entries(feeContractAddresses)) {
     acceptedTokens.blockNumber = max
   }
   // TODO: add listener for SetToken
+  const paymentsForChain = paymentsByChain[chainId]
+  paymentsForChain.blockNumber = deployBlockNumber
+  while (paymentsForChain.blockNumber < finalizedBlockNumber) {
+    const min = paymentsForChain.blockNumber
+    const max = Math.min(min + MAX_QUERY_RANGE, finalizedBlockNumber)
+    await feeContract.queryFilter('Pay', min, max).then(logs => {
+      for (const {transactionHash, transactionIndex, getBlock, args} of logs) {
+        const logId = `${transactionHash}:${transactionIndex}`
+        if (!paymentsForChain.includedLogs.has(logId)) {
+          paymentsForChain.includedLogs.add(logId)
+          paymentsForChain.paymentsByAddress[args.user] ??= []
+          const timestamp = await getBlock().then(b => b.timestamp)
+          paymentsForChain.paymentsByAddress[args.user].push({
+            amount: args.amount,
+            token: args.token,
+            timestamp,
+            tx: transactionHash
+          })
+        }
+      }
+    })
+  }
+  // TODO: add listener for Pay
 }
 
 // TODO: fill paymentsByChain and add listener
@@ -72,6 +97,7 @@ app.get(`/:chainId(\\d+)/:address(${addressRe})/payments`,
       const tokens = (typeof req.query.token == 'string' ? [req.query.token] : req.query.token) || []
       if (tokens.some(t => !addressRegExp.test(t)))
         return fail(400, 'invalid fee token address')
+      // TODO: add 'after' query parameter for restricting time range
       const acceptedTokens = acceptedTokensByChain[req.params.chainId]
       if (tokens.some(t => !acceptedTokens.ever.has(t)))
         return fail(400, 'fee token was never accepted')
