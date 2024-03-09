@@ -1,6 +1,7 @@
 {
   "type": "module",
   "dependencies": {
-    "ethers": "6"
+    "ethers": "6",
+    "express": "4"
   }
 }
