@@ -123,6 +123,7 @@ const fail = (res, statusCode, body) => {
 app.get(`/:chainId(\\d+)/:address(${addressRe})/payments`,
   async (req, res, next) => {
     try {
+      const address = req.params.address.toLowerCase()
       const feeContract = feeContracts[req.params.chainId]
       if (!feeContract) return fail(404, 'unknown chainId')
       const tokens = (typeof req.query.token == 'string' ? [req.query.token] : req.query.token) || []
@@ -134,7 +135,7 @@ app.get(`/:chainId(\\d+)/:address(${addressRe})/payments`,
         return fail(400, 'fee token was never accepted')
       if (!tokens.length)
         tokens = Array.from(acceptedTokens.current.values())
-      const payments = paymentsByChain[req.params.chainId].paymentsByAddress[req.params.address]
+      const payments = paymentsByChain[req.params.chainId].paymentsByAddress[address]
       const result = {}
       tokens.forEach(t => result[t] = [])
       if (!payments) return res.status(404).json(result)
