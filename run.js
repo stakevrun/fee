@@ -1,6 +1,11 @@
 import { ethers } from 'ethers'
 import express from 'express'
 
+const timestamp = () => Intl.DateTimeFormat('en-GB',
+    {year: 'numeric', month: 'short', day: '2-digit',
+     hour: '2-digit', minute: '2-digit', second: '2-digit'}
+  ).format(new Date())
+
 const providers = {
   // 1: new ethers.JsonRpcProvider(process.env.RPC || 'http://localhost:8545'),
   17000: new ethers.JsonRpcProvider(process.env.RPC_HOLESKY || 'http://localhost:8546')
@@ -66,6 +71,7 @@ const updateAcceptedTokens = async (chainId) => {
       }
     })
     acceptedTokens.blockNumber = max
+    console.log(`${timestamp()}: ${chainId}: updated acceptedTokens to ${max}`)
   }
 }
 
@@ -93,6 +99,8 @@ const updatePayments = async (chainId) => {
         }
       }
     })
+    paymentsForChain.blockNumber = max
+    console.log(`${timestamp()}: ${chainId}: updated payments to ${max}`)
   }
 }
 
