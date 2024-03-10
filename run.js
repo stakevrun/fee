@@ -1,7 +1,10 @@
 import { ethers } from 'ethers'
 import express from 'express'
 
-const provider = new ethers.JsonRpcProvider(process.env.RPC || 'http://localhost:8545')
+const providers = {
+  // 1: new ethers.JsonRpcProvider(process.env.RPC || 'http://localhost:8545'),
+  17000: new ethers.JsonRpcProvider(process.env.RPC_HOLESKY || 'http://localhost:8546')
+}
 
 const port = process.env.PORT || 8080
 
@@ -28,15 +31,27 @@ const feeContractAbi = [
 
 const MAX_QUERY_RANGE = 10000
 
-const finalizedBlockNumber = await provider.getBlock('finalized').then(b => b.number)
-
 for (const [chainId, {address, deployBlockNumber}] of Object.entries(feeContractAddresses)) {
+  const provider = providers[chainId]
   const feeContract = new ethers.Contract(address, feeContractAbi, provider)
   feeContracts[chainId] = feeContract
   const acceptedTokens = acceptedTokensByChain[chainId]
   acceptedTokens.current.add(await feeContract.weth())
   acceptedTokens.ever.add(await feeContract.weth())
   acceptedTokens.blockNumber = deployBlockNumber
+  const paymentsForChain = paymentsByChain[chainId]
+  paymentsForChain.blockNumber = deployBlockNumber
+}
+
+const finalizedBlockNumberByChain = {
+  // 1: 0,
+  17000: 0
+}
+
+const updateAcceptedTokens = async (chainId) => {
+  const feeContract = feeContracts[chainId]
+  const finalizedBlockNumber = finalizedBlockNumberByChain[chainId]
+  const acceptedTokens = acceptedTokensByChain[chainId]
   while (acceptedTokens.blockNumber < finalizedBlockNumber) {
     const min = acceptedTokens.blockNumber
     const max = Math.min(min + MAX_QUERY_RANGE, finalizedBlockNumber)
@@ -52,13 +67,17 @@ for (const [chainId, {address, deployBlockNumber}] of Object.entries(feeContract
     })
     acceptedTokens.blockNumber = max
   }
-  // TODO: add listener for SetToken
+}
+
+const updatePayments = async (chainId) => {
+  const feeContract = feeContracts[chainId]
+  const finalizedBlockNumber = finalizedBlockNumberByChain[chainId]
+  const acceptedTokens = acceptedTokensByChain[chainId]
   const paymentsForChain = paymentsByChain[chainId]
-  paymentsForChain.blockNumber = deployBlockNumber
   while (paymentsForChain.blockNumber < finalizedBlockNumber) {
     const min = paymentsForChain.blockNumber
     const max = Math.min(min + MAX_QUERY_RANGE, finalizedBlockNumber)
-    await feeContract.queryFilter('Pay', min, max).then(logs => {
+    await feeContract.queryFilter('Pay', min, max).then(async logs => {
       for (const {transactionHash, transactionIndex, getBlock, args} of logs) {
         const logId = `${transactionHash}:${transactionIndex}`
         if (!paymentsForChain.includedLogs.has(logId)) {
@@ -75,10 +94,14 @@ for (const [chainId, {address, deployBlockNumber}] of Object.entries(feeContract
       }
     })
   }
-  // TODO: add listener for Pay
 }
 
-// TODO: fill paymentsByChain and add listener
+for (const [chainId, provider] of Object.entries(providers)) {
+  provider.on('block', async () => {
+    finalizedBlockNumberByChain[chainId] = await provider.getBlock('finalized').then(b => b.number)
+    await Promise.all([updateAcceptedTokens(chainId), updatePayments(chainId)])
+  })
+}
 
 const app = express()
 
@@ -115,5 +138,7 @@ app.get(`/:chainId(\\d+)/:address(${addressRe})/payments`,
     }
     catch (e) { next(e) }
 })
+
+// TODO: add route for charges
 
 app.listen(port)
