@@ -1,5 +1,6 @@
 import { ethers } from 'ethers'
 import express from 'express'
+import cors from 'cors'
 
 const timestamp = () => Intl.DateTimeFormat('en-GB',
     {year: 'numeric', month: 'short', day: '2-digit',
@@ -112,6 +113,8 @@ for (const [chainId, provider] of Object.entries(providers)) {
 }
 
 const app = express()
+
+app.use(cors())
 
 const addressRe = '0x[0-9a-fA-F]{40}'
 const addressRegExp = new RegExp(addressRe)
