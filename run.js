@@ -144,7 +144,7 @@ app.get(`/:chainId(\\d+)/:address(${addressRe})/payments`,
       if (!payments) return res.status(404).json(result)
       for (const log of payments) {
         if (tokens.includes(log.token))
-          result[log.token].append({amount: log.amount, timestamp: log.timestamp, tx: log.tx})
+          result[log.token].push({amount: log.amount, timestamp: log.timestamp, tx: log.tx})
       }
       return res.status(200).json(result)
     }
