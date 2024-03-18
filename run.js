@@ -85,14 +85,19 @@ const updatePayments = async (chainId) => {
     const min = paymentsForChain.blockNumber
     const max = Math.min(min + MAX_QUERY_RANGE, finalizedBlockNumber)
     await feeContract.queryFilter('Pay', min, max).then(async logs => {
-      for (const {transactionHash, transactionIndex, getBlock, args} of logs) {
+      console.log(`Got ${logs.length} Pay logs between ${min} and ${max}`)
+      for (const log of logs) {
+        const {transactionHash, transactionIndex, args} = log
         const logId = `${transactionHash}:${transactionIndex}`
+        console.log(`Processing log ${logId}`)
         if (!paymentsForChain.includedLogs.has(logId)) {
+          const address = args.user.toLowerCase()
+          console.log(`Adding log for ${address}`)
           paymentsForChain.includedLogs.add(logId)
-          paymentsForChain.paymentsByAddress[args.user] ??= []
-          const timestamp = await getBlock().then(b => b.timestamp)
-          paymentsForChain.paymentsByAddress[args.user].push({
-            amount: args.amount,
+          paymentsForChain.paymentsByAddress[address] ??= []
+          const timestamp = await log.getBlock().then(b => b.timestamp)
+          paymentsForChain.paymentsByAddress[address].push({
+            amount: args.amount.toString(),
             token: args.token,
             timestamp,
             tx: transactionHash
