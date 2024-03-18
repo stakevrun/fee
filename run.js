@@ -129,7 +129,7 @@ app.get(`/:chainId(\\d+)/:address(${addressRe})/payments`,
       const address = req.params.address.toLowerCase()
       const feeContract = feeContracts[req.params.chainId]
       if (!feeContract) return fail(404, 'unknown chainId')
-      const tokens = (typeof req.query.token == 'string' ? [req.query.token] : req.query.token) || []
+      let tokens = (typeof req.query.token == 'string' ? [req.query.token] : req.query.token) || []
       if (tokens.some(t => !addressRegExp.test(t)))
         return fail(400, 'invalid fee token address')
       // TODO: add 'after' query parameter for restricting time range
