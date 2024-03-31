@@ -12,6 +12,10 @@ const providers = {
   17000: new ethers.JsonRpcProvider(process.env.RPC_HOLESKY || 'http://localhost:8546')
 }
 
+const beaconUrls = {
+  17000: process.env.BN_HOLESKY || 'http://localhost:5053'
+}
+
 const port = process.env.PORT || 8080
 
 const feeContractAddresses = {
@@ -24,6 +28,10 @@ const acceptedTokensByChain = {
 
 const paymentsByChain = {
   17000: { blockNumber: 0, includedLogs: new Set(), paymentsByAddress: new Map() }
+}
+
+const setEnabledLogsByChainAndAddress = {
+  17000: {}
 }
 
 const feeContracts = {}
@@ -154,8 +162,44 @@ app.get(`/:chainId(\\d+)/:address(${addressRe})/payments`,
       return res.status(200).json(result)
     }
     catch (e) { next(e) }
-})
+  }
+)
 
-// TODO: add route for charges
+app.get(`/:chainId(\\d+)/:address(${addressRe})/:pubkey(0x[0-9a-fA-F]{96})/charges`,
+  async (req, res, next) => {
+    try {
+      const beaconUrl = beaconUrls[req.params.chainId]
+      if (!beaconUrl) return fail(res, 404, 'unknown chainId')
+      const address = req.params.address.toLowerCase()
+      const pubkey = req.params.pubkey.toLowerCase()
+      // TODO: accept 'after' or similar query param for restricted date range
+      const setEnabledLogsByAddress = setEnabledLogsByChainAndAddress[req.params.chainId]
+      if (!setEnabledLogsByAddress) return fail(res, 404, 'no logs for chainId')
+      setEnabledLogsByAddress[address] ||= {}
+      const setEnabledLogsByPubkey = setEnabledLogsByAddress[address]
+      setEnabledLogsByPubkey[pubkey] ||= []
+      const setEnabledLogs = setEnabledLogsByPubkey[pubkey]
+      const setEnabledLogCount = await fetch(`https://db.vrün.com/${chainId}/${address}/${pubkey}/length?type=SetEnabled`).then(async r => {
+        if (r.status !== 200)
+          return fail(res, r.status, `failed to fetch logs length: ${await r.text()}`)
+        else return r.json()
+      }).catch(e => fail(res, 500, e.message))
+      if (typeof setEnabledLogCount !== 'number')
+        return res.headersSent || fail(res, 500, `failed to fetch logs length: ${setEnabledLogCount}`)
+      if (setEnabledLogCount > setEnabledLogs.length) {
+        const numMissing = setEnabledLogs.length - setEnabledLogCount
+        const moreLogsRes = await fetch(`https://db.vrün.com/${chainId}/${address}/${pubkey}/logs?type=SetEnabled&start=-${numMissing}`)
+        if (moreLogsRes.status !== 200)
+          return fail(res, moreLogsRes.status, `failed to fetch logs: ${await moreLogsRes.text()}`)
+        const moreLogs = await moreLogsRes.json()
+        setEnabledLogs.push(...moreLogs)
+      }
+      // TODO: find (and cache) active range on beaconchain for pubkey
+      // TODO: return intersection of active range and enabled ranges as array of day ranges
+      return res.status(501).send('')
+    }
+    catch (e) { next(e) }
+  }
+)
 
 app.listen(port)
