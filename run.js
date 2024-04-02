@@ -2,6 +2,13 @@ import { ethers } from 'ethers'
 import express from 'express'
 import cors from 'cors'
 
+const genesisTimes = {
+  1: 1606824023,
+  17000: 1695902400
+}
+const secondsPerSlot = 12
+const slotsPerEpoch = 32
+
 const timestamp = () => Intl.DateTimeFormat('en-GB',
     {year: 'numeric', month: 'short', day: '2-digit',
      hour: '2-digit', minute: '2-digit', second: '2-digit'}
@@ -34,6 +41,10 @@ const setEnabledLogsByChainAndAddress = {
   17000: {}
 }
 
+const beaconIntervalByChainAndPubkey = {
+  17000: {}
+}
+
 const feeContracts = {}
 
 const feeContractAbi = [
@@ -60,6 +71,16 @@ for (const [chainId, {address, deployBlockNumber}] of Object.entries(feeContract
 const finalizedBlockNumberByChain = {
   // 1: 0,
   17000: 0
+}
+
+const finalizedSlotNumberByChain = {
+  // 1: 0,
+  17000: 0
+}
+
+const timestampToSlot = (chainId, timestamp) => {
+  const genesisTime = genesisTimes[chainId]
+  return Math.floor((timestamp - genesisTime) / secondsPerSlot)
 }
 
 const updateAcceptedTokens = async (chainId) => {
@@ -120,7 +141,11 @@ const updatePayments = async (chainId) => {
 
 for (const [chainId, provider] of Object.entries(providers)) {
   provider.on('block', async () => {
-    finalizedBlockNumberByChain[chainId] = await provider.getBlock('finalized').then(b => b.number)
+    const block = await provider.getBlock('finalized')
+    finalizedBlockNumberByChain[chainId] = block.number
+    const slotNumber = timestampToSlot(chainId, block.timestamp)
+    finalizedSlotNumberByChain[chainId] = slotNumber
+    console.log(`${timestamp()}: ${chainId}: finalized slot: ${slotNumber}`)
     await Promise.all([updateAcceptedTokens(chainId), updatePayments(chainId)])
   })
 }
@@ -174,7 +199,20 @@ app.get(`/:chainId(\\d+)/:address(${addressRe})/:pubkey(0x[0-9a-fA-F]{96})/charg
       const pubkey = req.params.pubkey.toLowerCase()
       // TODO: accept 'after' or similar query param for restricted date range
       const setEnabledLogsByAddress = setEnabledLogsByChainAndAddress[req.params.chainId]
-      if (!setEnabledLogsByAddress) return fail(res, 404, 'no logs for chainId')
+      const beaconIntervalByPubkey = beaconIntervalByChainAndPubkey[req.params.chainId]
+      if (!(setEnabledLogsByAddress && beaconIntervalByPubkey)) return fail(res, 404, 'no logs/intervals for chainId')
+      beaconIntervalByPubkey[pubkey] ||= {slotNumber: 0}
+      const beaconInterval = beaconIntervalByPubkey[pubkey]
+      const finalizedSlotNumber = finalizedSlotNumberByChain[chainId]
+      if (beaconInterval.slotNumber < finalizedSlotNumber) {
+        const validatorStateRes = await fetch(`${beaconUrl}/eth/v1/beacon/states/${finalizedSlotNumber}/validators/${pubkey}`)
+        if (validatorStateRes.status !== 200)
+          return fail(res, validatorStateRes.status, `failed to fetch validator status: ${await validatorStateRes.text()}`)
+        const validatorState = await validatorStateRes.json().then(j => j.data.validator)
+        beaconInterval.activationEpoch = validatorState.activation_epoch
+        beaconInterval.exitEpoch = validatorState.exit_epoch
+        beaconInterval.slotNumber = finalizedSlotNumber
+      }
       setEnabledLogsByAddress[address] ||= {}
       const setEnabledLogsByPubkey = setEnabledLogsByAddress[address]
       setEnabledLogsByPubkey[pubkey] ||= []
@@ -194,7 +232,6 @@ app.get(`/:chainId(\\d+)/:address(${addressRe})/:pubkey(0x[0-9a-fA-F]{96})/charg
         const moreLogs = await moreLogsRes.json()
         setEnabledLogs.push(...moreLogs)
       }
-      // TODO: find (and cache) active range on beaconchain for pubkey
       // TODO: return intersection of active range and enabled ranges as array of day ranges
       return res.status(501).send('')
     }
