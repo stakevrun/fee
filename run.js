@@ -192,6 +192,9 @@ app.get(`/:chainId(\\d+)/:address(${addressRe})/payments`,
   }
 )
 
+const padNum = (n, z) => n.toString().padStart(z, '0')
+const formatDay = (d) => `${padNum(d.getUTCFullYear(), 4)}-${padNum(d.getUTCMonth()+1, 2)}-${padNum(d.getUTCDate(), 2)}`
+
 app.get(`/:chainId(\\d+)/:address(${addressRe})/:pubkey(0x[0-9a-fA-F]{96})/charges`,
   async (req, res, next) => {
     try {
@@ -211,8 +214,10 @@ app.get(`/:chainId(\\d+)/:address(${addressRe})/:pubkey(0x[0-9a-fA-F]{96})/charg
         if (validatorStateRes.status !== 200)
           return fail(res, validatorStateRes.status, `failed to fetch validator status: ${await validatorStateRes.text()}`)
         const validatorState = await validatorStateRes.json().then(j => j.data.validator)
-        beaconInterval.activationEpoch = validatorState.activation_epoch
-        beaconInterval.exitEpoch = validatorState.exit_epoch
+        const genesisTime = genesisTimes[chainId]
+        beaconInterval.activationTime = genesisTime + validatorState.activation_epoch * slotsPerEpoch * secondsPerSlot
+        // TODO: check if there are duties during the exit epoch
+        beaconInterval.exitTime = genesisTime + validatorState.exit_epoch * slotsPerEpoch * secondsPerSlot
         beaconInterval.slotNumber = finalizedSlotNumber
       }
       setEnabledLogsByAddress[address] ||= {}
@@ -234,8 +239,28 @@ app.get(`/:chainId(\\d+)/:address(${addressRe})/:pubkey(0x[0-9a-fA-F]{96})/charg
         const moreLogs = await moreLogsRes.json()
         setEnabledLogs.push(...moreLogs)
       }
-      // TODO: return intersection of active range and enabled ranges as array of day ranges
-      return res.status(501).send('')
+      let lastEnabled = false
+      let lastTimestamp = 0
+      const activeIntervals = []
+      const addInterval = timestamp => {
+        const startTime = Math.max(lastTimestamp, beaconInterval.activationTime)
+        const endTime = Math.min(timestamp, beaconInterval.exitTime)
+        const firstDayDate = new Date(startTime * 1000)
+        const lastDayDate = new Date(endTime * 1000)
+        const firstDay = formatDay(firstDayDate)
+        const lastDay = formatDay(lastDayDate)
+        const numDays = ((Date.parse(lastDay) / 1000) - (Date.parse(firstDay) / 1000)) / (24 * 60 * 60) + 1
+        activeIntervals.push({startTime, firstDay, endTime, lastDay, numDays})
+      }
+      for (const {enabled, timestamp} of setEnabledLogs) {
+        if (timestamp <= lastTimestamp) return fail(res, 500, `SetEnabled logs not in order for ${pubkey}`)
+        if (enabled == lastEnabled) return fail(res, 500, `SetEnabled logs do not alternate for ${pubkey}`)
+        if (lastEnabled) addInterval(timestamp)
+        lastEnabled = enabled
+        lastTimestamp = timestamp
+      }
+      if (lastEnabled) addInterval(Math.round(new Date().getTime() / 1000))
+      return res.status(200).json(activeIntervals)
     }
     catch (e) { next(e) }
   }
