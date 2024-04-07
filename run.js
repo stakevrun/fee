@@ -144,8 +144,10 @@ for (const [chainId, provider] of Object.entries(providers)) {
     const block = await provider.getBlock('finalized')
     finalizedBlockNumberByChain[chainId] = block.number
     const slotNumber = timestampToSlot(chainId, block.timestamp)
-    finalizedSlotNumberByChain[chainId] = slotNumber
-    console.log(`${timestamp()}: ${chainId}: finalized slot: ${slotNumber}`)
+    if (finalizedSlotNumberByChain[chainId] != slotNumber) {
+      console.log(`${timestamp()}: ${chainId}: finalized slot: ${slotNumber}`)
+      finalizedSlotNumberByChain[chainId] = slotNumber
+    }
     await Promise.all([updateAcceptedTokens(chainId), updatePayments(chainId)])
   })
 }
