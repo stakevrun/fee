@@ -198,13 +198,14 @@ const formatDay = (d) => `${padNum(d.getUTCFullYear(), 4)}-${padNum(d.getUTCMont
 app.get(`/:chainId(\\d+)/:address(${addressRe})/:pubkey(0x[0-9a-fA-F]{96})/charges`,
   async (req, res, next) => {
     try {
-      const beaconUrl = beaconUrls[req.params.chainId]
+      const chainId = req.params.chainId
+      const beaconUrl = beaconUrls[chainId]
       if (!beaconUrl) return fail(res, 404, 'unknown chainId')
       const address = req.params.address.toLowerCase()
       const pubkey = req.params.pubkey.toLowerCase()
       // TODO: accept 'after' or similar query param for restricted date range
-      const setEnabledLogsByAddress = setEnabledLogsByChainAndAddress[req.params.chainId]
-      const beaconIntervalByPubkey = beaconIntervalByChainAndPubkey[req.params.chainId]
+      const setEnabledLogsByAddress = setEnabledLogsByChainAndAddress[chainId]
+      const beaconIntervalByPubkey = beaconIntervalByChainAndPubkey[chainId]
       if (!(setEnabledLogsByAddress && beaconIntervalByPubkey)) return fail(res, 404, 'no logs/intervals for chainId')
       beaconIntervalByPubkey[pubkey] ||= {slotNumber: 0}
       const beaconInterval = beaconIntervalByPubkey[pubkey]
