@@ -234,7 +234,7 @@ app.get(`/:chainId(\\d+)/:address(${addressRe})/:pubkey(0x[0-9a-fA-F]{96})/charg
         return res.headersSent || fail(res, 500, `failed to fetch logs length: ${setEnabledLogCount}`)
       if (setEnabledLogCount > setEnabledLogs.length) {
         const numMissing = setEnabledLogs.length - setEnabledLogCount
-        const moreLogsRes = await fetch(`https://db.vrün.com/${chainId}/${address}/${pubkey}/logs?type=SetEnabled&start=-${numMissing}`)
+        const moreLogsRes = await fetch(`https://db.vrün.com/${chainId}/${address}/${pubkey}/logs?type=SetEnabled&start=${numMissing}`)
         if (moreLogsRes.status !== 200)
           return fail(res, moreLogsRes.status, `failed to fetch logs: ${await moreLogsRes.text()}`)
         const moreLogs = await moreLogsRes.json()
