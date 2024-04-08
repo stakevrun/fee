@@ -246,6 +246,7 @@ app.get(`/:chainId(\\d+)/:address(${addressRe})/:pubkey(0x[0-9a-fA-F]{96})/charg
       const addInterval = timestamp => {
         const startTime = Math.max(lastTimestamp, beaconInterval.activationTime)
         const endTime = Math.min(timestamp, beaconInterval.exitTime)
+        if (endTime < startTime) return
         const firstDayDate = new Date(startTime * 1000)
         const lastDayDate = new Date(endTime * 1000)
         const firstDay = formatDay(firstDayDate)
