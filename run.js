@@ -257,7 +257,7 @@ app.get(`/:chainId(\\d+)/:address(${addressRe})/:pubkey(${pubkeyRe})/charges`,
       const setEnabledLogsByPubkey = setEnabledLogsByAddress[address]
       setEnabledLogsByPubkey[pubkey] ||= []
       const setEnabledLogs = setEnabledLogsByPubkey[pubkey]
-      const setEnabledLogCount = await fetch(`https://db.vrün.com/${chainId}/${address}/${pubkey}/length?type=SetEnabled`).then(async r => {
+      const setEnabledLogCount = await fetch(`https://api.vrün.com/${chainId}/${address}/${pubkey}/length?type=SetEnabled`).then(async r => {
         if (r.status !== 200)
           return fail(res, r.status, `failed to fetch logs length: ${await r.text()}`)
         else return r.json()
@@ -266,7 +266,7 @@ app.get(`/:chainId(\\d+)/:address(${addressRe})/:pubkey(${pubkeyRe})/charges`,
         return res.headersSent || fail(res, 500, `failed to fetch logs length: ${setEnabledLogCount}`)
       if (setEnabledLogCount > setEnabledLogs.length) {
         const numMissing = setEnabledLogs.length - setEnabledLogCount
-        const moreLogsRes = await fetch(`https://db.vrün.com/${chainId}/${address}/${pubkey}/logs?type=SetEnabled&start=${numMissing}`)
+        const moreLogsRes = await fetch(`https://api.vrün.com/${chainId}/${address}/${pubkey}/logs?type=SetEnabled&start=${numMissing}`)
         if (moreLogsRes.status !== 200)
           return fail(res, moreLogsRes.status, `failed to fetch logs: ${await moreLogsRes.text()}`)
         const moreLogs = await moreLogsRes.json()
