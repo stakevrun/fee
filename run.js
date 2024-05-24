@@ -9,17 +9,48 @@ const genesisTimes = {
 const secondsPerSlot = 12
 const slotsPerEpoch = 32
 
+const rocketStorageABI = [
+  'function getAddress(bytes32) view returns (address)'
+]
+
+const rocketNodeManagerABI = [
+  'function getSmoothingPoolRegistrationState(address) view returns (bool)',
+  'function getSmoothingPoolRegistrationChanged(address) view returns (uint256)'
+]
+const rocketNodeManagerKey = ethers.id('contract.addressrocketNodeManager')
+const getRocketNodeManager = async (rocketStorage) =>
+  new ethers.Contract(await rocketStorage['getAddress(bytes32)'](rocketNodeManagerKey),
+    rocketNodeManagerABI, rocketStorage.runner)
+
+const rocketNodeDistributorFactoryABI = [
+  'function getProxyAddress(address) view returns (address)'
+]
+const rocketNodeDistributorFactoryKey = ethers.id('contract.addressrocketNodeDistributorFactory')
+const getNodeDistributorAddress = (rocketStorage, nodeAddress) =>
+  rocketStorage['getAddress(bytes32)'](rocketNodeDistributorFactoryKey).then(addr =>
+    (new ethers.Contract(addr, rocketNodeDistributorFactoryABI, rocketStorage.runner)).getProxyAddress(nodeAddress)
+  )
+
+const rocketSmoothingPoolKey = ethers.id('contract.addressrocketSmoothingPool')
+const getSmoothingPoolAddress = rocketStorage => rocketStorage['getAddress(bytes32)'](rocketSmoothingPoolKey)
+
+const rocketStorageFactories = {
+  1: new ethers.Contract('0x1d8f8f00cfa6758d7bE78336684788Fb0ee0Fa46', rocketStorageABI),
+  17000: new ethers.Contract('0x594Fb75D3dc2DFa0150Ad03F99F97817747dd4E1', rocketStorageABI)
+}
+
 const timestamp = () => Intl.DateTimeFormat('en-GB',
     {year: 'numeric', month: 'short', day: '2-digit',
      hour: '2-digit', minute: '2-digit', second: '2-digit'}
   ).format(new Date())
 
 const providers = {
-  // 1: new ethers.JsonRpcProvider(process.env.RPC || 'http://localhost:8545'),
+  1: new ethers.JsonRpcProvider(process.env.RPC_MAINNET || 'http://localhost:8545'),
   17000: new ethers.JsonRpcProvider(process.env.RPC_HOLESKY || 'http://localhost:8546')
 }
 
 const beaconUrls = {
+  1: process.env.BN_MAINNET || 'http://localhost:5052',
   17000: process.env.BN_HOLESKY || 'http://localhost:5053'
 }
 
@@ -158,6 +189,7 @@ app.use(cors())
 
 const addressRe = '0x[0-9a-fA-F]{40}'
 const addressRegExp = new RegExp(addressRe)
+const pubkeyRe = '0x[0-9a-fA-F]{96}'
 
 const fail = (res, statusCode, body) => {
   res.status(statusCode).send(body)
@@ -195,7 +227,7 @@ app.get(`/:chainId(\\d+)/:address(${addressRe})/payments`,
 const padNum = (n, z) => n.toString().padStart(z, '0')
 const formatDay = (d) => `${padNum(d.getUTCFullYear(), 4)}-${padNum(d.getUTCMonth()+1, 2)}-${padNum(d.getUTCDate(), 2)}`
 
-app.get(`/:chainId(\\d+)/:address(${addressRe})/:pubkey(0x[0-9a-fA-F]{96})/charges`,
+app.get(`/:chainId(\\d+)/:address(${addressRe})/:pubkey(${pubkeyRe})/charges`,
   async (req, res, next) => {
     try {
       const chainId = req.params.chainId
@@ -265,6 +297,31 @@ app.get(`/:chainId(\\d+)/:address(${addressRe})/:pubkey(0x[0-9a-fA-F]{96})/charg
       return res.status(200).json(activeIntervals)
     }
     catch (e) { next(e) }
+  }
+)
+
+app.get(`/:chainId(\\d+)/:address(${addressRe})/rp-fee-recipient`,
+  async (req, res, next) => {
+    try {
+      const chainId = req.params.chainId
+      const beaconUrl = beaconUrls[chainId]
+      const provider = providers[chainId]
+      if (!(beaconUrl && provider)) return fail(res, 404, 'unknown chainId')
+      const address = req.params.address.toLowerCase()
+      const pubkey = req.params.pubkey.toLowerCase()
+      const rocketStorage = rocketStorageFactories[chainId].connect(provider)
+      const rocketNodeManager = await getRocketNodeManager(rocketStorage)
+      const [inSmoothingPool, lastChange] = await Promise.all([
+        rocketNodeManager.getSmoothingPoolRegistrationState(nodeAddress),
+        rocketNodeManager.getSmoothingPoolRegistrationChanged(nodeAddress)
+      ])
+      // TODO: depend on lastChange and current epoch
+      const rpFeeRecipient = inSmoothingPool ?
+        await getSmoothingPoolAddress(rocketStorage) :
+        await getNodeDistributorAddress(rocketStorage, address)
+      return res.status(200).json(rpFeeRecipient)
+    }
+    catch (e) { next (e) }
   }
 )
 
