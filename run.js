@@ -123,10 +123,7 @@ const timestampToSlot = (chainId, timestamp) => {
 
 const updateAcceptedTokens = async (chainId) => {
   const feeContract = feeContracts[chainId]
-  if (!feeContract) {
-    console.warn(`${timestamp()}: skipping updateAcceptedTokens for undeployed chain ${chainId}`)
-    return
-  }
+  if (!feeContract) return
   const finalizedBlockNumber = finalizedBlockNumberByChain[chainId]
   const acceptedTokens = acceptedTokensByChain[chainId]
   while (acceptedTokens.blockNumber < finalizedBlockNumber) {
@@ -149,10 +146,7 @@ const updateAcceptedTokens = async (chainId) => {
 
 const updatePayments = async (chainId) => {
   const feeContract = feeContracts[chainId]
-  if (!feeContract) {
-    console.warn(`${timestamp()}: skipping updatePayments for undeployed chain ${chainId}`)
-    return
-  }
+  if (!feeContract) return
   const finalizedBlockNumber = finalizedBlockNumberByChain[chainId]
   const acceptedTokens = acceptedTokensByChain[chainId]
   const paymentsForChain = paymentsByChain[chainId]
