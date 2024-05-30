@@ -60,19 +60,26 @@ const feeContractAddresses = {
   17000: {address: '0x272347F941fb5f35854D8f5DbDcEdef1A515dB41', deployBlockNumber: 1091372}
 }
 
+const newAcceptedTokens = () => ({ blockNumber: 0, includedLogs: new Set(), current: new Set(), ever: new Set() })
+const newPayments = () => ({ blockNumber: 0, includedLogs: new Set(), paymentsByAddress: new Map() })
+
 const acceptedTokensByChain = {
-  17000: { blockNumber: 0, includedLogs: new Set(), current: new Set(), ever: new Set() }
+  1: newAcceptedTokens(),
+  17000: newAcceptedTokens()
 }
 
 const paymentsByChain = {
-  17000: { blockNumber: 0, includedLogs: new Set(), paymentsByAddress: new Map() }
+  1: newPayments(),
+  17000: newPayments()
 }
 
 const setEnabledLogsByChainAndAddress = {
+  1: {},
   17000: {}
 }
 
 const beaconIntervalByChainAndPubkey = {
+  1: {},
   17000: {}
 }
 
