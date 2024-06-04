@@ -252,7 +252,9 @@ app.get(`/:chainId(\\d+)/:address(${addressRe})/:pubkey(${pubkeyRe})/charges`,
       const beaconInterval = beaconIntervalByPubkey[pubkey]
       const finalizedSlotNumber = finalizedSlotNumberByChain[chainId]
       if (beaconInterval.slotNumber < finalizedSlotNumber) {
-        const validatorStateRes = await fetch(`${beaconUrl}/eth/v1/beacon/states/${finalizedSlotNumber}/validators/${pubkey}`)
+        const validatorStateURL = `${beaconUrl}/eth/v1/beacon/states/${finalizedSlotNumber}/validators/${pubkey}`
+        const validatorStateRes = await fetch(validatorStateURL).catch(
+          e => ({status: 500, text: () => `${validatorStateURL}: ${e.message}`}))
         if (validatorStateRes.status !== 200)
           return fail(res, validatorStateRes.status, `failed to fetch validator status: ${await validatorStateRes.text()}`)
         const validatorState = await validatorStateRes.json().then(j => j.data.validator)
