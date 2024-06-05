@@ -255,6 +255,8 @@ app.get(`/:chainId(\\d+)/:address(${addressRe})/:pubkey(${pubkeyRe})/charges`,
         const validatorStateURL = `${beaconUrl}/eth/v1/beacon/states/${finalizedSlotNumber}/validators/${pubkey}`
         const validatorStateRes = await fetch(validatorStateURL).catch(
           e => ({status: 500, text: () => `${validatorStateURL}: ${e.message}`}))
+        if (validatorStateRes.status === 404)
+          return res.status(200).json([]) // validator not found: assume no chargeable days yet
         if (validatorStateRes.status !== 200)
           return fail(res, validatorStateRes.status, `failed to fetch validator status: ${await validatorStateRes.text()}`)
         const validatorState = await validatorStateRes.json().then(j => j.data.validator)
