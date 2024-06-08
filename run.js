@@ -274,7 +274,7 @@ app.get(`/:chainId(\\d+)/:address(${addressRe})/payments`,
         return fail(res, 400, 'fee token was never accepted')
       if (!tokens.length)
         tokens = Array.from(acceptedTokens.current.values())
-      const payments = paymentsByChain[req.params.chainId].paymentsByAddress[address].slice()
+      const payments = paymentsByChain[req.params.chainId].paymentsByAddress[address]?.slice()
       const result = {}
       tokens.forEach(t => result[t] = [])
       if (!payments) return res.status(404).json(result)
