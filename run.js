@@ -197,7 +197,8 @@ const updatePayments = async (chainId) => {
   for (const blockNumber of unfinalizedPaymentsByBlock.keys())
     if (blockNumber <= finalizedBlockNumber)
       unfinalizedPaymentsByBlock.delete(blockNumber)
-  unfinalizedPaymentsForChain.blockNumber = Math.max(finalizedBlockNumber + 1, unfinalizedPaymentsForChain.blockNumber)
+  if (unfinalizedPaymentsForChain.blockNumber <= finalizedBlockNumber)
+    unfinalizedPaymentsForChain.blockNumber = finalizedBlockNumber + 1
   // TODO: refactor to avoid so much duplication with above
   while (unfinalizedPaymentsForChain.blockNumber < unfinalizedBlockNumber) {
     const min = unfinalizedPaymentsForChain.blockNumber
