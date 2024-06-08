@@ -61,7 +61,7 @@ const feeContractAddresses = {
 }
 
 const newAcceptedTokens = () => ({ blockNumber: 0, includedLogs: new Set(), current: new Set(), ever: new Set() })
-const newPayments = () => ({ blockNumber: 0, includedLogs: new Set(), paymentsByAddress: new Map() })
+const newPayments = () => ({ blockNumber: 0, includedLogs: new Set(), paymentsByAddress: {} })
 
 const acceptedTokensByChain = {
   1: newAcceptedTokens(),
