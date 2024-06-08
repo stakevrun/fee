@@ -73,6 +73,13 @@ const paymentsByChain = {
   17000: newPayments()
 }
 
+const newUnfinalizedPayments = () => ({ blockNumber: 0, paymentsByBlock: new Map() })
+
+const unfinalizedPaymentsByChain = {
+  1: newUnfinalizedPayments(),
+  17000: newUnfinalizedPayments()
+}
+
 const setEnabledLogsByChainAndAddress = {
   1: {},
   17000: {}
@@ -107,6 +114,11 @@ for (const [chainId, {address, deployBlockNumber}] of Object.entries(feeContract
 }
 
 const finalizedBlockNumberByChain = {
+  // 1: 0,
+  17000: 0
+}
+
+const unfinalizedBlockNumberByChain = {
   // 1: 0,
   17000: 0
 }
@@ -147,6 +159,7 @@ const updateAcceptedTokens = async (chainId) => {
 const updatePayments = async (chainId) => {
   const feeContract = feeContracts[chainId]
   if (!feeContract) return
+
   const finalizedBlockNumber = finalizedBlockNumberByChain[chainId]
   const acceptedTokens = acceptedTokensByChain[chainId]
   const paymentsForChain = paymentsByChain[chainId]
@@ -177,10 +190,51 @@ const updatePayments = async (chainId) => {
     paymentsForChain.blockNumber = max
     console.log(`${timestamp()}: ${chainId}: updated payments to ${max}`)
   }
+
+  const unfinalizedBlockNumber = unfinalizedBlockNumberByChain[chainId]
+  const unfinalizedPaymentsForChain = unfinalizedPaymentsByChain[chainId]
+  const unfinalizedPaymentsByBlock = unfinalizedPaymentsForChain.paymentsByBlock
+  for (const blockNumber of unfinalizedPaymentsByBlock.keys())
+    if (blockNumber <= finalizedBlockNumber)
+      unfinalizedPaymentsByBlock.delete(blockNumber)
+  unfinalizedPaymentsForChain.blockNumber = Math.max(finalizedBlockNumber + 1, unfinalizedPaymentsForChain.blockNumber)
+  // TODO: refactor to avoid so much duplication with above
+  while (unfinalizedPaymentsForChain.blockNumber < unfinalizedBlockNumber) {
+    const min = unfinalizedPaymentsForChain.blockNumber
+    const max = Math.min(min + MAX_QUERY_RANGE, unfinalizedBlockNumber)
+    await feeContract.queryFilter('Pay', min, max).then(async logs => {
+      console.log(`Got ${logs.length} unfinalized Pay logs between ${min} and ${max}`)
+      for (const log of logs) {
+        const {transactionHash, transactionIndex, args} = log
+        const block = await log.getBlock()
+        const blockNumber = block.number
+        if (!unfinalizedPaymentsByBlock.has(blockNumber))
+          unfinalizedPaymentsByBlock.set(blockNumber, { includedLogs: new Set(), paymentsByAddress: {} })
+        const {includedLogs, paymentsByAddress} = unfinalizedPaymentsByBlock.get(blockNumber)
+        const logId = `${transactionHash}:${transactionIndex}`
+        console.log(`Processing unfinalized log ${logId}`)
+        if (!includedLogs.has(logId)) {
+          const address = args.user.toLowerCase()
+          console.log(`Adding unfinalized log for ${address}`)
+          includedLogs.add(logId)
+          paymentsByAddress[address] ??= []
+          paymentsByAddress[address].push({
+            amount: args.amount.toString(),
+            token: args.token,
+            timestamp: block.timestamp,
+            tx: transactionHash
+          })
+        }
+      }
+    })
+    unfinalizedPaymentsForChain.blockNumber = max
+    console.log(`${timestamp()}: ${chainId}: updated unfinalized payments to ${max}`)
+  }
 }
 
 for (const [chainId, provider] of Object.entries(providers)) {
-  provider.on('block', async () => {
+  provider.on('block', async (latestBlockNumber) => {
+    unfinalizedBlockNumberByChain[chainId] = latestBlockNumber
     const block = await provider.getBlock('finalized')
     finalizedBlockNumberByChain[chainId] = block.number
     const slotNumber = timestampToSlot(chainId, block.timestamp)
@@ -223,6 +277,9 @@ app.get(`/:chainId(\\d+)/:address(${addressRe})/payments`,
       const result = {}
       tokens.forEach(t => result[t] = [])
       if (!payments) return res.status(404).json(result)
+      unfinalizedPaymentsByChain[req.params.chainId].paymentsByBlock.forEach(
+        ({paymentsByAddress}) => payments.push(...(paymentsByAddress[address] || []))
+      )
       for (const log of payments) {
         if (tokens.includes(log.token))
           result[log.token].push({amount: log.amount, timestamp: log.timestamp, tx: log.tx})
