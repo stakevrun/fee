@@ -365,7 +365,19 @@ app.get(`/:chainId(\\d+)/:address(${addressRe})/:pubkey(${pubkeyRe})/charges`,
         lastTimestamp = timestamp
       }
       if (lastEnabled) addInterval(Math.round(new Date().getTime() / 1000))
-      return res.status(200).json(activeIntervals)
+      // TODO: add query param to skip merging?
+      const mergedIntervals = []
+      for (const interval of activeIntervals) {
+        if (mergedIntervals.at(-1)?.lastDay === interval.firstDay) {
+          const prevInterval = mergedIntervals.at(-1)
+          prevInterval.lastDay = interval.lastDay
+          prevInterval.endTime = interval.endTime
+          prevInterval.numDays += interval.numDays - 1
+        }
+        else
+          mergedIntervals.push(interval)
+      }
+      return res.status(200).json(mergedIntervals)
     }
     catch (e) { next(e) }
   }
