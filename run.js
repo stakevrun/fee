@@ -390,7 +390,7 @@ app.get(`/:chainId(\\d+)/:address(${addressRe})/rp-fee-recipient`,
       const beaconUrl = beaconUrls[chainId]
       const provider = providers[chainId]
       if (!(beaconUrl && provider)) return fail(res, 404, 'unknown chainId')
-      const address = req.params.address.toLowerCase()
+      const nodeAddress = req.params.address.toLowerCase()
       const rocketStorage = rocketStorageFactories[chainId].connect(provider)
       const rocketNodeManager = await getRocketNodeManager(rocketStorage)
       const [inSmoothingPool, lastChange] = await Promise.all([
@@ -400,7 +400,7 @@ app.get(`/:chainId(\\d+)/:address(${addressRe})/rp-fee-recipient`,
       // TODO: depend on lastChange and current epoch
       const rpFeeRecipient = inSmoothingPool ?
         await getSmoothingPoolAddress(rocketStorage) :
-        await getNodeDistributorAddress(rocketStorage, address)
+        await getNodeDistributorAddress(rocketStorage, nodeAddress)
       return res.status(200).json(rpFeeRecipient)
     }
     catch (e) { next (e) }
