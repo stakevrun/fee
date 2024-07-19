@@ -391,7 +391,6 @@ app.get(`/:chainId(\\d+)/:address(${addressRe})/rp-fee-recipient`,
       const provider = providers[chainId]
       if (!(beaconUrl && provider)) return fail(res, 404, 'unknown chainId')
       const address = req.params.address.toLowerCase()
-      const pubkey = req.params.pubkey.toLowerCase()
       const rocketStorage = rocketStorageFactories[chainId].connect(provider)
       const rocketNodeManager = await getRocketNodeManager(rocketStorage)
       const [inSmoothingPool, lastChange] = await Promise.all([
