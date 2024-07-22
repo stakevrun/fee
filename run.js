@@ -1,6 +1,10 @@
 import { ethers } from 'ethers'
 import express from 'express'
 import cors from 'cors'
+import { readFileSync } from 'node:fs'
+
+const signer = new ethers.Wallet(readFileSync('signing.key'))
+console.log(`Using signer account ${await signer.getAddress()}`)
 
 const genesisTimes = {
   1: 1606824023,
@@ -56,28 +60,9 @@ const beaconUrls = {
 
 const port = process.env.PORT || 8080
 
-const feeContractAddresses = {
-  17000: {address: '0x272347F941fb5f35854D8f5DbDcEdef1A515dB41', deployBlockNumber: 1091372}
-}
-
-const newAcceptedTokens = () => ({ blockNumber: 0, includedLogs: new Set(), current: new Set(), ever: new Set() })
-const newPayments = () => ({ blockNumber: 0, includedLogs: new Set(), paymentsByAddress: {} })
-
-const acceptedTokensByChain = {
-  1: newAcceptedTokens(),
-  17000: newAcceptedTokens()
-}
-
-const paymentsByChain = {
-  1: newPayments(),
-  17000: newPayments()
-}
-
-const newUnfinalizedPayments = () => ({ blockNumber: 0, paymentsByBlock: new Map() })
-
-const unfinalizedPaymentsByChain = {
-  1: newUnfinalizedPayments(),
-  17000: newUnfinalizedPayments()
+const feeReceivers = {
+  1: '0x99E2b1FB1085C392b9091A5505b0Ac27979501F8',
+  17000: '0x99E2b1FB1085C392b9091A5505b0Ac27979501F8',
 }
 
 const setEnabledLogsByChainAndAddress = {
@@ -90,161 +75,25 @@ const beaconIntervalByChainAndPubkey = {
   17000: {}
 }
 
-const feeContracts = {}
-
-const feeContractAbi = [
-  'function weth() view returns (address)',
-  'function acceptedTokens(address) view returns (bool)',
-  'event Pay(address indexed user, address indexed token, uint256 indexed amount)',
-  'event SetToken(address indexed token, bool indexed accepted)'
-]
-
-const MAX_QUERY_RANGE = 10000
-
-for (const [chainId, {address, deployBlockNumber}] of Object.entries(feeContractAddresses)) {
-  const provider = providers[chainId]
-  const feeContract = new ethers.Contract(address, feeContractAbi, provider)
-  feeContracts[chainId] = feeContract
-  const acceptedTokens = acceptedTokensByChain[chainId]
-  acceptedTokens.current.add(await feeContract.weth())
-  acceptedTokens.ever.add(await feeContract.weth())
-  acceptedTokens.blockNumber = deployBlockNumber
-  const paymentsForChain = paymentsByChain[chainId]
-  paymentsForChain.blockNumber = deployBlockNumber
-}
-
-const finalizedBlockNumberByChain = {
-  // 1: 0,
-  17000: 0
-}
-
-const unfinalizedBlockNumberByChain = {
-  // 1: 0,
-  17000: 0
-}
-
 const finalizedSlotNumberByChain = {
-  // 1: 0,
+  1: 0,
   17000: 0
-}
-
-const timestampToSlot = (chainId, timestamp) => {
-  const genesisTime = genesisTimes[chainId]
-  return Math.floor((timestamp - genesisTime) / secondsPerSlot)
-}
-
-const updateAcceptedTokens = async (chainId) => {
-  const feeContract = feeContracts[chainId]
-  if (!feeContract) return
-  const finalizedBlockNumber = finalizedBlockNumberByChain[chainId]
-  const acceptedTokens = acceptedTokensByChain[chainId]
-  while (acceptedTokens.blockNumber < finalizedBlockNumber) {
-    const min = acceptedTokens.blockNumber
-    const max = Math.min(min + MAX_QUERY_RANGE, finalizedBlockNumber)
-    await feeContract.queryFilter('SetToken', min, max).then(logs => {
-      for (const {transactionHash, transactionIndex, args} of logs) {
-        const logId = `${transactionHash}:${transactionIndex}`
-        if (!acceptedTokens.includedLogs.has(logId)) {
-          acceptedTokens.includedLogs.add(logId)
-          acceptedTokens.current[args.accepted ? 'add' : 'delete'](args.token)
-          if (args.accepted) acceptedTokens.ever.add(args.token)
-        }
-      }
-    })
-    acceptedTokens.blockNumber = max
-    console.log(`${timestamp()}: ${chainId}: updated acceptedTokens to ${max}`)
-  }
-}
-
-const updatePayments = async (chainId) => {
-  const feeContract = feeContracts[chainId]
-  if (!feeContract) return
-
-  const finalizedBlockNumber = finalizedBlockNumberByChain[chainId]
-  const acceptedTokens = acceptedTokensByChain[chainId]
-  const paymentsForChain = paymentsByChain[chainId]
-  while (paymentsForChain.blockNumber < finalizedBlockNumber) {
-    const min = paymentsForChain.blockNumber
-    const max = Math.min(min + MAX_QUERY_RANGE, finalizedBlockNumber)
-    await feeContract.queryFilter('Pay', min, max).then(async logs => {
-      console.log(`Got ${logs.length} Pay logs between ${min} and ${max}`)
-      for (const log of logs) {
-        const {transactionHash, transactionIndex, args} = log
-        const logId = `${transactionHash}:${transactionIndex}`
-        console.log(`Processing log ${logId}`)
-        if (!paymentsForChain.includedLogs.has(logId)) {
-          const address = args.user.toLowerCase()
-          console.log(`Adding log for ${address}`)
-          paymentsForChain.includedLogs.add(logId)
-          paymentsForChain.paymentsByAddress[address] ??= []
-          const timestamp = await log.getBlock().then(b => b.timestamp)
-          paymentsForChain.paymentsByAddress[address].push({
-            amount: args.amount.toString(),
-            token: args.token,
-            timestamp,
-            tx: transactionHash
-          })
-        }
-      }
-    })
-    paymentsForChain.blockNumber = max
-    console.log(`${timestamp()}: ${chainId}: updated payments to ${max}`)
-  }
-
-  const unfinalizedBlockNumber = unfinalizedBlockNumberByChain[chainId]
-  const unfinalizedPaymentsForChain = unfinalizedPaymentsByChain[chainId]
-  const unfinalizedPaymentsByBlock = unfinalizedPaymentsForChain.paymentsByBlock
-  for (const blockNumber of unfinalizedPaymentsByBlock.keys())
-    if (blockNumber <= finalizedBlockNumber)
-      unfinalizedPaymentsByBlock.delete(blockNumber)
-  if (unfinalizedPaymentsForChain.blockNumber <= finalizedBlockNumber)
-    unfinalizedPaymentsForChain.blockNumber = finalizedBlockNumber + 1
-  // TODO: refactor to avoid so much duplication with above
-  while (unfinalizedPaymentsForChain.blockNumber < unfinalizedBlockNumber) {
-    const min = unfinalizedPaymentsForChain.blockNumber
-    const max = Math.min(min + MAX_QUERY_RANGE, unfinalizedBlockNumber)
-    await feeContract.queryFilter('Pay', min, max).then(async logs => {
-      console.log(`Got ${logs.length} unfinalized Pay logs between ${min} and ${max}`)
-      for (const log of logs) {
-        const {transactionHash, transactionIndex, args} = log
-        const block = await log.getBlock()
-        const blockNumber = block.number
-        if (!unfinalizedPaymentsByBlock.has(blockNumber))
-          unfinalizedPaymentsByBlock.set(blockNumber, { includedLogs: new Set(), paymentsByAddress: {} })
-        const {includedLogs, paymentsByAddress} = unfinalizedPaymentsByBlock.get(blockNumber)
-        const logId = `${transactionHash}:${transactionIndex}`
-        console.log(`Processing unfinalized log ${logId}`)
-        if (!includedLogs.has(logId)) {
-          const address = args.user.toLowerCase()
-          console.log(`Adding unfinalized log for ${address}`)
-          includedLogs.add(logId)
-          paymentsByAddress[address] ??= []
-          paymentsByAddress[address].push({
-            amount: args.amount.toString(),
-            token: args.token,
-            timestamp: block.timestamp,
-            tx: transactionHash
-          })
-        }
-      }
-    })
-    unfinalizedPaymentsForChain.blockNumber = max
-    console.log(`${timestamp()}: ${chainId}: updated unfinalized payments to ${max}`)
-  }
 }
 
 for (const [chainId, provider] of Object.entries(providers)) {
   provider.on('block', async (latestBlockNumber) => {
-    unfinalizedBlockNumberByChain[chainId] = latestBlockNumber
     const block = await provider.getBlock('finalized')
-    finalizedBlockNumberByChain[chainId] = block.number
     const slotNumber = timestampToSlot(chainId, block.timestamp)
     if (finalizedSlotNumberByChain[chainId] != slotNumber) {
       console.log(`${timestamp()}: ${chainId}: finalized slot: ${slotNumber}`)
       finalizedSlotNumberByChain[chainId] = slotNumber
     }
-    await Promise.all([updateAcceptedTokens(chainId), updatePayments(chainId)])
   })
+}
+
+const timestampToSlot = (chainId, timestamp) => {
+  const genesisTime = genesisTimes[chainId]
+  return Math.floor((timestamp - genesisTime) / secondsPerSlot)
 }
 
 const app = express()
@@ -263,6 +112,12 @@ app.get(`/:chainId(\\d+)/:address(${addressRe})/payments`,
   async (req, res, next) => {
     try {
       const address = req.params.address.toLowerCase()
+      const chainId = req.params.chainId
+      // TODO: rework README, maybe rename route to balance?
+      // cache and
+      // return current credit balance of vrün validator days
+      // based on reading the credit logs from the api
+      /*
       const feeContract = feeContracts[req.params.chainId]
       if (!feeContract) return fail(res, 404, 'unknown chainId')
       let tokens = (typeof req.query.token == 'string' ? [req.query.token] : req.query.token) || []
@@ -277,7 +132,10 @@ app.get(`/:chainId(\\d+)/:address(${addressRe})/payments`,
       const payments = paymentsByChain[req.params.chainId].paymentsByAddress[address]?.slice()
       const result = {}
       tokens.forEach(t => result[t] = [])
-      if (!payments) return res.status(404).json(result)
+      */
+      // if (!payments) return res.status(404).json(result)
+      return res.status(501).end()
+      /*
       unfinalizedPaymentsByChain[req.params.chainId].paymentsByBlock.forEach(
         ({paymentsByAddress}) => payments.push(...(paymentsByAddress[address] || []))
       )
@@ -286,6 +144,7 @@ app.get(`/:chainId(\\d+)/:address(${addressRe})/payments`,
           result[log.token].push({amount: log.amount, timestamp: log.timestamp, tx: log.tx})
       }
       return res.status(200).json(result)
+      */
     }
     catch (e) { next(e) }
   }
