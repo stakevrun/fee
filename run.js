@@ -3,7 +3,7 @@ import express from 'express'
 import cors from 'cors'
 import { readFileSync } from 'node:fs'
 
-const signer = new ethers.Wallet(readFileSync('signing.key'))
+const signer = new ethers.Wallet(readFileSync('signing.key').toString('hex'))
 console.log(`Using signer account ${await signer.getAddress()}`)
 
 const genesisTimes = {
