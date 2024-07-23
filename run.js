@@ -20,6 +20,7 @@ const pricesUntilTimestamp = {
       },
       // TODO: deploy Safe and add Base
       // TODO: deplay Safe and add Arbitrum
+      // TODO: deplay Safe and add Optimism
     },
     // Holesky
     17000: {
@@ -148,6 +149,22 @@ const pubkeyRe = '0x[0-9a-fA-F]{96}'
 const fail = (res, statusCode, body) => {
   res.status(statusCode).send(body)
 }
+
+app.get(`/:chainId(\\d+)/prices`,
+  async (req, res, next) => {
+    try {
+      const chainId = parseInt(req.params.chainId)
+      const timestamp = parseInt(req.query.timestamp)
+      if (!Number.isNaN(timestamp)) return fail(res, 501, 'custom timestamp not implemented') // TODO
+      const validUntil = 'now'
+      const pricesByChain = pricesUntilTimestamp[validUntil]
+      const pricesPerDay = pricesByChain[chainId]
+      if (!pricesPerDay) return fail(res, 404, 'Unknown chainId')
+      return res.status(200).json({chainId, validUntil, pricesPerDay})
+    }
+    catch (e) { next(e) }
+  }
+)
 
 app.get(`/:chainId(\\d+)/:address(${addressRe})/credits`,
   async (req, res, next) => {
