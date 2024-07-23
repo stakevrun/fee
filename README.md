@@ -1,30 +1,40 @@
-# vrün fee info server
+# vrün fee server
 
-API endpoint for information about Vrün users' payments and charges.
+API endpoint for information about Vrün users' credits and charges, and to
+validate and record payments.
 
-All routes are GET requests that return `application/json` content.
+All routes return `application/json` content.
 
-## Payments
+## Credits
 
-Route: `/<chainId>/<address>/payments[?token=<token address>&...]`
+Route: `GET /<chainId>/<address>/credits`
 
-Returns the payments made to Vrün for user `<address>` (the address of the
-Rocket Pool node). The `token` query parameter can be provided zero or more
-times. If not provided, all accepted tokens are considered.
+Returns the number of Vrün validator days credited to user `<address>` (the
+address of the Rocket Pool node). (Used days are included.)
 
-The object returned has the following format:
+If the `logs` query parameter is provided, returns a list of `CreditAccount`
+log entries (instead of their net balance). The list returned has the following
+format and is ordered by the timestamp:
 ```
-{ <token address, hex: string>:
-    [ { "amount":    <unsigned integer, decimal: string>,
-        "timestamp": <Unix epoch seconds: number>,
-        "tx":        <transaction hash, hex: string> }
-    , ... ]
-, ... }
+[ { "timestamp":       <Unix epoch seconds, string>,
+    "nodeAccount":     <address, string>,
+    "numDays":         <decimal number, string>,
+    "decreaseBalance:  <bool>,
+    "chainId":         <decimal number, string>,
+    "transactionHash": <32 bytes, hex string>,
+    "reason":          <string> }
+, ... ]
 ```
+
+## Payment
+
+Route: `PUT /<chainId>/<address>/pay`
+
+TODO: Not implemented yet
 
 ## Charges
 
-Route: `/<chainId>/<address>/<pubkey>/charges`
+Route: `GET /<chainId>/<address>/<pubkey>/charges`
 
 Returns the chargeable days by Vrün for user `<address>` (the address of the
 Rocket Pool node) for their validator identified by <pubkey>. The days are
@@ -42,7 +52,7 @@ The array returned has the following format:
 
 ## Rocket Pool Fee Recipient
 
-Route: `/<chainId>/<address>/rp-fee-recipient`
+Route: `GET /<chainId>/<address>/rp-fee-recipient`
 
 Returns the current fee recipient (address: hex string) that the Rocket Pool
 node `<address>` should use, based on its smoothing pool registration status.

@@ -70,6 +70,16 @@ const setEnabledLogsByChainAndAddress = {
   17000: {}
 }
 
+const creditAccountLogsByChainAndAddress = {
+  1: {},
+  17000: {}
+}
+
+const balanceByChainAndAddress = {
+  1: {},
+  17000: {}
+}
+
 const beaconIntervalByChainAndPubkey = {
   1: {},
   17000: {}
@@ -108,43 +118,40 @@ const fail = (res, statusCode, body) => {
   res.status(statusCode).send(body)
 }
 
-app.get(`/:chainId(\\d+)/:address(${addressRe})/payments`,
+app.get(`/:chainId(\\d+)/:address(${addressRe})/credits`,
   async (req, res, next) => {
     try {
       const address = req.params.address.toLowerCase()
       const chainId = req.params.chainId
-      // TODO: rework README, maybe rename route to balance?
-      // cache and
-      // return current credit balance of vrün validator days
-      // based on reading the credit logs from the api
-      /*
-      const feeContract = feeContracts[req.params.chainId]
-      if (!feeContract) return fail(res, 404, 'unknown chainId')
-      let tokens = (typeof req.query.token == 'string' ? [req.query.token] : req.query.token) || []
-      if (tokens.some(t => !addressRegExp.test(t)))
-        return fail(res, 400, 'invalid fee token address')
-      // TODO: add 'after' query parameter for restricting time range
-      const acceptedTokens = acceptedTokensByChain[req.params.chainId]
-      if (tokens.some(t => !acceptedTokens.ever.has(t)))
-        return fail(res, 400, 'fee token was never accepted')
-      if (!tokens.length)
-        tokens = Array.from(acceptedTokens.current.values())
-      const payments = paymentsByChain[req.params.chainId].paymentsByAddress[address]?.slice()
-      const result = {}
-      tokens.forEach(t => result[t] = [])
-      */
-      // if (!payments) return res.status(404).json(result)
-      return res.status(501).end()
-      /*
-      unfinalizedPaymentsByChain[req.params.chainId].paymentsByBlock.forEach(
-        ({paymentsByAddress}) => payments.push(...(paymentsByAddress[address] || []))
-      )
-      for (const log of payments) {
-        if (tokens.includes(log.token))
-          result[log.token].push({amount: log.amount, timestamp: log.timestamp, tx: log.tx})
+      // TODO: add query parameters for restricting time range?
+      const creditAccountLogsByAddress = creditAccountLogsByChainAndAddress[chainId]
+      const balanceByAddress = balanceByChainAndAddress[chainId]
+      if (!(creditAccountLogsByAddress && balanceByAddress)) return fail(res, 404, 'Unknown chainId')
+      creditAccountLogsByAddress[address] ||= []
+      balanceByAddress[address] ||= {length: 0, numDays: 0}
+      const creditAccountLogs = creditAccountLogsByAddress[address]
+      const balance = balanceByAddress[address]
+      const creditAccountLogCount = await fetch(`https://api.vrün.com/${chainId}/${address}/credit/length`).then(async r => {
+        if (r.status !== 200)
+          return fail(res, r.status, `failed to fetch credit logs length: ${await r.text()}`)
+        else return r.json()
+      }).catch(e => fail(res, 500, e.message))
+      if (typeof creditAccountLogCount !== 'number')
+        return res.headersSent || fail(res, 500, `failed to fetch credit logs length: ${creditAccountLogCount}`)
+      if (creditAccountLogCount > creditAccountLogs.length) {
+        const numMissing = creditAccountLogs.length - creditAccountLogCount
+        const moreLogsRes = await fetch(`https://api.vrün.com/${chainId}/${address}/credit/logs?start=${numMissing}`)
+        if (moreLogsRes.status !== 200)
+          return fail(res, moreLogsRes.status, `failed to fetch credit logs: ${await moreLogsRes.text()}`)
+        const moreLogs = await moreLogsRes.json()
+        creditAccountLogs.push(...moreLogs)
       }
-      return res.status(200).json(result)
-      */
+      if (balance.length < creditAccountLogs.length) {
+        for (const {numDays, decreaseBalance} of creditAccountLogs.slice(balance.length))
+          balance.numDays += (decreaseBalance ? -1 : +1) * parseInt(numDays)
+        balance.length = creditAccountLogs.length
+      }
+      return res.status(200).json(req.query.logs ? creditAccountLogs : balance.numDays)
     }
     catch (e) { next(e) }
   }
