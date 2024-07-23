@@ -18,9 +18,13 @@ const pricesUntilTimestamp = {
         '0x6B175474E89094C44Da98b954EedeAC495271d0F': '300000000000000000', // DAI
         '0x5f98805A4E8be255a32880FDeC7F6728C6568bA0': '300000000000000000', // LUSD
       },
-      // TODO: deploy Safe and add Base
-      // TODO: deplay Safe and add Arbitrum
+      // Arbitrum One
+      42161: {
+        '0x82aF49447D8a07e3bd95BD0d56f35241523fBab1': '50000000000000',     // WETH
+        '0xaf88d065e77c8cC2239327C5EDb3A432268e5831': '300000',             // USDC
+      },
       // TODO: deplay Safe and add Optimism
+      // TODO: deploy Safe and add Base
     },
     // Holesky
     17000: {
@@ -93,7 +97,8 @@ const beaconUrls = {
 const port = process.env.PORT || 8080
 
 const feeReceivers = {
-  1: '0x99E2b1FB1085C392b9091A5505b0Ac27979501F8',
+      1: '0x99E2b1FB1085C392b9091A5505b0Ac27979501F8',
+  42161: '0x99E2b1FB1085C392b9091A5505b0Ac27979501F8',
   17000: '0x99E2b1FB1085C392b9091A5505b0Ac27979501F8',
 }
 
