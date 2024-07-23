@@ -6,6 +6,37 @@ import { readFileSync } from 'node:fs'
 const signer = new ethers.Wallet(readFileSync('signing.key').toString('hex'))
 console.log(`Using signer account ${await signer.getAddress()}`)
 
+const pricesUntilTimestamp = {
+  'now': {
+    // Ethereum
+    1: {
+      // Ethereum
+      1: {
+        '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2': '50000000000000',     // WETH
+        '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48': '300000',             // USDC
+        '0xdAC17F958D2ee523a2206206994597C13D831ec7': '300000',             // USDT
+        '0x6B175474E89094C44Da98b954EedeAC495271d0F': '300000000000000000', // DAI
+        '0x5f98805A4E8be255a32880FDeC7F6728C6568bA0': '300000000000000000', // LUSD
+      },
+      // TODO: deploy Safe and add Base
+      // TODO: deplay Safe and add Arbitrum
+    },
+    // Holesky
+    17000: {
+      // Holesky
+      17000: {
+        '0x94373a4919B3240D86eA41593D5eBa789FEF3848': '50000000000000', // WETH
+      },
+      // TODO: deploy safe for Sepolia
+      // Sepolia
+      11155111: {
+        '0x7b79995e5f793A07Bc00c21412e50Ecae098E7f9': '50000000000000', // WETH
+        '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238': '300000',         // USDC
+      },
+    },
+  }
+}
+
 const genesisTimes = {
   1: 1606824023,
   17000: 1695902400
