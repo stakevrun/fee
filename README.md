@@ -28,7 +28,7 @@ The list returned has the following format and is ordered by the timestamp:
 
 ## Prices
 
-Route: `GET /<chainId>/prices` TODO: Not implemented yet
+Route: `GET /<chainId>/prices`
 
 Returns an object of the following format:
 ```
