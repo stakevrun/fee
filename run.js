@@ -6,6 +6,8 @@ import { readFileSync } from 'node:fs'
 const signer = new ethers.Wallet(readFileSync('signing.key').toString('hex'))
 console.log(`Using signer account ${await signer.getAddress()}`)
 
+const nullAddress = '0x'.padEnd(42, '0')
+
 const pricesUntilTimestamp = {
   'now': {
     // Ethereum
@@ -147,6 +149,8 @@ const app = express()
 
 app.use(cors())
 
+app.use(express.json())
+
 const addressRe = '0x[0-9a-fA-F]{40}'
 const addressRegExp = new RegExp(addressRe)
 const pubkeyRe = '0x[0-9a-fA-F]{96}'
@@ -166,6 +170,51 @@ app.get(`/:chainId(\\d+)/prices`,
       const pricesPerDay = pricesByChain[chainId]
       if (!pricesPerDay) return fail(res, 404, 'Unknown chainId')
       return res.status(200).json({chainId, validUntil, pricesPerDay})
+    }
+    catch (e) { next(e) }
+  }
+)
+
+const eip712DomainForChain = chainId => ({name: 'vrün', version: '1', chainId})
+const eip712Types = {
+  Pay: [
+    {name: 'nodeAccount',     type: 'address'},
+    {name: 'numDays',         type: 'uint256'},
+    {name: 'tokenChainId',    type: 'uint256'},
+    {name: 'tokenAddress',    type: 'address'},
+    {name: 'transactionHash', type: 'bytes32'},
+  ]
+}
+
+app.put(`/:chainId(\\d+)/:address(${addressRe})/pay`,
+  async (req, res, next) => {
+    try {
+      const chainId = req.params.chainId
+      const provider = providers[chainId]
+      if (!provider) return fail(res, 404, 'unknown chainId')
+      const domain = eip712DomainForChain(chainId)
+      const {signature, ...data} = req.body
+      let signingAddress
+      try {
+        signingAddress = ethers.verifyTypedData(domain, eip712Types, data, signature)
+      }
+      catch (e) {
+        return fail(res, 400, `could not verify signed data: ${e.message}`)
+      }
+      const txChainId = data.chainId
+      const txProvider = providers[txChainId]
+      const feeReceiver = feeReceivers[txChainId]
+      if (!(txProvider && feeReceiver)) return fail(res, 400, 'unknown chainId for transaction')
+      const tx = await txProvider.getTransaction(data.transactionHash)
+      if (!tx) return fail(res, 400, 'transaction not found')
+      if (signingAddress !== tx.from) return fail(res, 400, 'signature not by transaction sender')
+      if (tx.to !== data.tokenAddress && !(tx.to === feeReceiver && data.tokenAddress === nullAddress))
+        return fail(res, 400, 'not a simple payment transaction')
+      // TODO: check transfer is to feeReceiver (if real token)
+      // TODO: check price (at time of transaction) against transfer value and numDays
+      // TODO: check credit log for this transaction does not already exist
+      // TODO: submit credit log for this transaction to api
+      return res.status(501).end()
     }
     catch (e) { next(e) }
   }

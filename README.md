@@ -69,7 +69,8 @@ The input data is a object in the following format:
 {
   "nodeAccount":     <address, 0x-prefixed hexstring>,
   "numDays":         <number, decimal string>,
-  "chainId":         <number, decimal string>,
+  "tokenChainId":    <number, decimal string>,
+  "tokenAddress":    <address, 0x-prefixed hexstring>,
   "transactionHash": <bytes32, 0x-prefixed hexstring>,
   "signature":       <signature, 0x-prefixed hexstring>
 }
@@ -79,7 +80,8 @@ The signature should be an EIP-712 signature over the structure:
 struct Pay {
   address nodeAccount;
   uint256 numDays;
-  uint256 chainId;
+  uint256 tokenChainId;
+  address tokenAddress;
   bytes32 transactionHash;
 }
 ```
