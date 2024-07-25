@@ -191,6 +191,10 @@ const eip712Types = {
   ]
 }
 
+const transferInterface = new ethers.Interface(
+  ['event Transfer(address indexed _from, address indexed _to, uint256 _value)']
+)
+
 app.put(`/:chainId(\\d+)/:address(${addressRe})/pay`,
   async (req, res, next) => {
     try {
@@ -214,8 +218,16 @@ app.put(`/:chainId(\\d+)/:address(${addressRe})/pay`,
       if (!tx) return fail(res, 400, 'transaction not found')
       if (signingAddress !== tx.from) return fail(res, 400, 'signature not by transaction sender')
       if (tx.to !== data.tokenAddress && !(tx.to === feeReceiver && data.tokenAddress === nullAddress))
-        return fail(res, 400, 'not a simple payment transaction')
-      // TODO: check transfer is to feeReceiver (if real token)
+        return fail(res, 400, 'not a payment transaction')
+      const getTransferValue = async () => {
+        const receipt = await tx.wait()
+        const transferLogs = receipt.logs.map(log =>
+          transferInterface.parseLog(log)
+        ).filter(log => log && log.args._to === feeReceiver)
+        return transferLogs.reduce((total, log) => total + log.args._value, 0n)
+      }
+      const transferValue = tx.to === feeReceiver ? tx.value : await getTransferValue()
+      if (transferValue == 0) return fail(res, 400, 'no non-zero transfer to feeReceiver in transaction')
       // TODO: check price (at time of transaction) against transfer value and numDays
       // TODO: check credit log for this transaction does not already exist
       // TODO: submit credit log for this transaction to api
