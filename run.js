@@ -232,7 +232,17 @@ app.put(`/:chainId(\\d+)/:address(${addressRe})/pay`,
       }
       const transferValue = tx.to === feeReceiver ? tx.value : await getTransferValue()
       if (transferValue == 0) return fail(res, 400, 'no non-zero transfer to feeReceiver in transaction')
-      // TODO: check price (at time of transaction) against transfer value and numDays
+      const timestamp = await tx.getBlock().then(b => b.timestamp)
+      const pricesByChain = pricesUntilTimestamp[getPriceTimestamp(timestamp)]
+      if (!pricesByChain) return fail(res, 500, `failed to find prices at block timestamp ${timestamp}`)
+      const pricesByTokenChainId = pricesByChain[chainId]
+      if (!pricesByTokenChainId) return fail(res, 400, `no prices for chainId ${chainId}`)
+      const prices = pricesByTokenChainId[tokenChainId]
+      if (!prices) return fail(res, 400, `no prices for token chain ${tokenChainId} for chain ${chainId}`)
+      const price = prices[ethers.getAddress(data.tokenAddress.toLowerCase())]
+      if (!price) return fail(res, 400, `no price for token ${data.tokenAddress}`)
+      if (BigInt(price) * BigInt(data.numDays) !== transferValue)
+        return fail(res, 400, `numDays inconsistent with transfer value and price`)
       // TODO: check credit log for this transaction does not already exist
       // TODO: submit credit log for this transaction to api
       return res.status(501).end()
