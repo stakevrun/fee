@@ -47,8 +47,8 @@ where `pricePerDay` is the price per Vrün validator day on chain `<chainId>`
 for the ERC-20 token `<tokenAddress>` on chain `<tokenChainId>`, as a decimal
 number string denominated in the smallest unit for the token.
 
-We always accept payment in unwrapped ETH (not listed explicitly in the
-returned object), at the same price as for wrapped ETH.
+We always accept payment in ETH, which is listed under token address
+`0x0000000000000000000000000000000000000000`.
 
 If the query parameter `timestamp` is provided and is a decimal string
 representing seconds after the Unix epoch, return the price as it was at that

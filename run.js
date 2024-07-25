@@ -14,6 +14,7 @@ const pricesUntilTimestamp = {
     1: {
       // Ethereum
       1: {
+        '0x0000000000000000000000000000000000000000': '50000000000000',     // ETH
         '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2': '50000000000000',     // WETH
         '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48': '300000',             // USDC
         '0xdAC17F958D2ee523a2206206994597C13D831ec7': '300000',             // USDT
@@ -22,20 +23,23 @@ const pricesUntilTimestamp = {
       },
       // Arbitrum One
       42161: {
+        '0x0000000000000000000000000000000000000000': '50000000000000',     // ETH
         '0x82aF49447D8a07e3bd95BD0d56f35241523fBab1': '50000000000000',     // WETH
         '0xaf88d065e77c8cC2239327C5EDb3A432268e5831': '300000',             // USDC
       },
-      // TODO: deplay Safe and add Optimism
       // TODO: deploy Safe and add Base
+      // TODO: deplay Safe and add Optimism
     },
     // Holesky
     17000: {
       // Holesky
       17000: {
+        '0x0000000000000000000000000000000000000000': '50000000000000', // ETH
         '0x94373a4919B3240D86eA41593D5eBa789FEF3848': '50000000000000', // WETH
       },
       // Sepolia
       11155111: {
+        '0x0000000000000000000000000000000000000000': '50000000000000', // ETH
         '0x7b79995e5f793A07Bc00c21412e50Ecae098E7f9': '50000000000000', // WETH
         '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238': '300000',         // USDC
       },
