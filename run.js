@@ -44,6 +44,12 @@ const pricesUntilTimestamp = {
   }
 }
 
+const sortedPricesTimestamps = Object.keys(pricesUntilTimestamp).map(k => k === 'now' ? Infinity : parseInt(k)).sort((a, b) => a - b)
+const getPriceTimestamp = t => {
+  const firstIncluding = sortedPricesTimestamps.find(k => t <= k)
+  return firstIncluding === Infinity ? 'now' : firstIncluding
+}
+
 const genesisTimes = {
   1: 1606824023,
   17000: 1695902400
@@ -164,8 +170,7 @@ app.get(`/:chainId(\\d+)/prices`,
     try {
       const chainId = parseInt(req.params.chainId)
       const timestamp = parseInt(req.query.timestamp)
-      if (!Number.isNaN(timestamp)) return fail(res, 501, 'custom timestamp not implemented') // TODO
-      const validUntil = 'now'
+      const validUntil = Number.isNaN(timestamp) ? 'now' : getPriceTimestamp(timestamp)
       const pricesByChain = pricesUntilTimestamp[validUntil]
       const pricesPerDay = pricesByChain[chainId]
       if (!pricesPerDay) return fail(res, 404, 'Unknown chainId')
