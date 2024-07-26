@@ -60,7 +60,7 @@ the prices per day may have changed.
 
 ## Payment
 
-Route: `PUT /<chainId>/<address>/pay` TODO: Not implemented yet
+Route: `POST /<chainId>/<address>/pay`
 
 Accepts `application/json`.
 

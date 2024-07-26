@@ -185,7 +185,7 @@ app.get(`/:chainId(\\d+)/prices`,
 )
 
 const eip712DomainForChain = chainId => ({name: 'vrün', version: '1', chainId})
-const eip712Types = {
+const payTypes = {
   Pay: [
     {name: 'nodeAccount',     type: 'address'},
     {name: 'numDays',         type: 'uint256'},
@@ -195,11 +195,24 @@ const eip712Types = {
   ]
 }
 
+const creditAccountTypes = {
+  CreditAccount: [
+    { type: "uint256", name: "timestamp" },
+    { type: "address", name: "nodeAccount" },
+    { type: "uint256", name: "numDays" },
+    { type: "bool"   , name: "decreaseBalance" },
+    { type: "uint256", name: "tokenChainId" },
+    { type: "address", name: "tokenAddress" },
+    { type: "bytes32", name: "transactionHash" },
+    { type: "string" , name: "reason" }
+  ]
+}
+
 const transferInterface = new ethers.Interface(
   ['event Transfer(address indexed _from, address indexed _to, uint256 _value)']
 )
 
-app.put(`/:chainId(\\d+)/:address(${addressRe})/pay`,
+app.post(`/:chainId(\\d+)/:address(${addressRe})/pay`,
   async (req, res, next) => {
     try {
       const chainId = req.params.chainId
@@ -209,7 +222,7 @@ app.put(`/:chainId(\\d+)/:address(${addressRe})/pay`,
       const {signature, ...data} = req.body
       let signingAddress
       try {
-        signingAddress = ethers.verifyTypedData(domain, eip712Types, data, signature)
+        signingAddress = ethers.verifyTypedData(domain, payTypes, data, signature)
       }
       catch (e) {
         return fail(res, 400, `could not verify signed data: ${e.message}`)
@@ -239,13 +252,38 @@ app.put(`/:chainId(\\d+)/:address(${addressRe})/pay`,
       if (!pricesByTokenChainId) return fail(res, 400, `no prices for chainId ${chainId}`)
       const prices = pricesByTokenChainId[tokenChainId]
       if (!prices) return fail(res, 400, `no prices for token chain ${tokenChainId} for chain ${chainId}`)
-      const price = prices[ethers.getAddress(data.tokenAddress.toLowerCase())]
-      if (!price) return fail(res, 400, `no price for token ${data.tokenAddress}`)
+      const tokenAddress = data.tokenAddress.toLowerCase()
+      const price = prices[ethers.getAddress(tokenAddress)]
+      if (!price) return fail(res, 400, `no price for token ${tokenAddress}`)
       if (BigInt(price) * BigInt(data.numDays) !== transferValue)
         return fail(res, 400, `numDays inconsistent with transfer value and price`)
-      // TODO: check credit log for this transaction does not already exist
-      // TODO: submit credit log for this transaction to api
-      return res.status(501).end()
+      const nodeAccount = req.params.address
+      const logs = await fetch(
+        `https://api.vrün.com/${chainId}/${nodeAccount}/credit/logs?hash=${tx.hash}`
+      ).then(res => res.json()).catch(e => fail(res, 400, `failed to fetch logs ${e.message}`))
+      if (!logs) return
+      if (logs.some(({tokenChainId: x, tokenAddress: y, transactionHash: z}) =>
+                    x == tokenChainId && y == tokenAddress && z == tx.hash))
+        return fail(res, 400, `credit log already exists`)
+      const creditAccountData = {
+        timestamp: Math.round(Date.now() / 1000),
+        nodeAccount,
+        numDays: BigInt(data.numDays),
+        decreaseBalance: false,
+        tokenChainId,
+        tokenAddress,
+        transactionHash: tx.hash,
+        reason: 'submitted to fee.vrün.com'
+      }
+      const creditAccountSignature = signer.signTypedData(domain, creditAccountTypes, creditAccountData)
+      const body = JSON.stringify({ type: 'CreditAccount', creditAccountData, creditAccountSignature })
+      const success = await fetch(`https://api.vrün.com/${chainId}/${nodeAccount}/credit`,
+        {method: 'POST', headers: {'Content-Type': 'application/json'}, body}
+      ).then(async r =>
+              r.status === 201 ||
+              fail(res, 400, `post credit failed with status ${r.status}: ${await r.text()}`)
+      ).catch(e => fail(res, 400, `post credit failed: ${e.message}`))
+      if (success) res.status(201).end()
     }
     catch (e) { next(e) }
   }
