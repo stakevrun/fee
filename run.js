@@ -1,6 +1,5 @@
 import { ethers } from 'ethers'
 import express from 'express'
-import cors from 'cors'
 import { readFileSync } from 'node:fs'
 
 const signer = new ethers.Wallet(readFileSync('signing.key').toString('hex'))
@@ -156,8 +155,6 @@ const timestampToSlot = (chainId, timestamp) => {
 }
 
 const app = express()
-
-app.use(cors())
 
 app.use(express.json())
 
