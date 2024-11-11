@@ -1,0 +1,46 @@
+---
+name: vrun-fee
+
+networks:
+  proxy:
+    name: ${PROXY_DOCKER_NETWORK:-vrun-db_proxy}
+    external: true
+  validator:
+    name: ${VALIDATOR_DOCKER_NETWORK:-vrun-db_default}
+    external: true
+
+configs:
+  dot-env:
+    file: .env
+  signing-key:
+    file: signing.key
+
+services:
+  fee:
+    container_name: ${COMPOSE_PROJECT_NAME}
+    user: ${FEE_USER:-fee}:${FEE_USER:-fee}
+    env_file:
+      - .env
+    build:
+      context: ${DOCKER_BUILD_PATH:-.}
+      dockerfile: Dockerfile
+      args:
+        - FEE_USER=${FEE_USER:-fee}
+      tags:
+        - vrun-fee:local-dev
+    ports:
+      - 8082:${FEE_LISTEN_PORT:-8080}
+    networks:
+      - validator
+      - proxy
+    configs:
+      - source: dot-env
+        target: /.env
+      - source: signing-key
+        target: /usr/share/fee/signing.key
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.services.vrun-fee.loadbalancer.server.scheme=http"
+      - "traefik.http.routers.vrun-fee.rule=PathPrefix(`/fee/`)"
+      - "traefik.http.routers.vrun-fee.middlewares=vrun-fee-strip-prefixes"
+      - "traefik.http.middlewares.vrun-fee-strip-prefixes.stripprefix.prefixes=/fee"

@@ -3,7 +3,7 @@ import express from 'express'
 import { readFileSync } from 'node:fs'
 
 const signer = new ethers.Wallet(readFileSync('signing.key').toString('hex'))
-console.log(`Using signer account ${await signer.getAddress()}`)
+signer.getAddress().then((address) => console.log(`Using signer account: ${address}`))
 
 const nullAddress = '0x'.padEnd(42, '0')
 
