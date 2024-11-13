@@ -115,3 +115,17 @@ Route: `GET /<chainId>/<address>/rp-fee-recipient`
 
 Returns the current fee recipient (address: hexstring) that the Rocket Pool
 node `<address>` should use, based on its smoothing pool registration status.
+
+# Types
+
+Route: `GET /<chainId>/types`
+
+Returns:
+```
+{
+  "types": {<structName>: [{"name": <fieldName>, "type": <fieldType>}, ...], ...},
+  "domain": {"name": <string>, "version": <string>, "chainId": <string>}
+}
+```
+the types (and domain) of the EIP-712 structures accepted by this server (i.e.,
+for the Payment route).

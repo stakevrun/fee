@@ -205,6 +205,27 @@ const creditAccountTypes = {
   ]
 }
 
+app.get(`/:chainId(\\d+)/types`,
+  async (req, res, next) => {
+    try {
+      const chainId = req.params.chainId
+      const headers = {}
+      headers['Content-Type'] = 'application/json'
+      const result = {
+        types: payTypes,
+        domain: eip712DomainForChain(chainId)
+      }
+      const body = JSON.stringify(result)
+      headers['Content-Length'] = Buffer.byteLength(body)
+      res.writeHead(200, headers)
+      res.end(body)
+    }
+    catch (e) {
+      next (e)
+    }
+  }
+)
+
 const transferInterface = new ethers.Interface(
   ['event Transfer(address indexed _from, address indexed _to, uint256 _value)']
 )
