@@ -278,7 +278,8 @@ app.post(`/:chainId(\\d+)/:address(${addressRe})/pay`,
       const nodeAccount = req.params.address
       const logs = await fetch(
         `https://api.vrün.com/${chainId}/${nodeAccount}/credit/logs?hash=${tx.hash}`
-      ).then(res => res.json()).catch(e => fail(res, 400, `failed to fetch logs ${e.message}`))
+      ).then(r => r.status === 404 ? [] : r.json()
+      ).catch(e => fail(res, 400, `failed to fetch logs ${e.message}`))
       if (!logs) return
       if (logs.some(({tokenChainId: x, tokenAddress: y, transactionHash: z}) =>
                     x == tokenChainId && y == tokenAddress && z == tx.hash))
