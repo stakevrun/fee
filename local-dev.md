@@ -26,12 +26,12 @@ This service requires the vrun-db local environment to be up and running as well
 
 ### Start the service in the background
 ```bash
-docker compose up -d
+docker compose --profile dev up -d
 ```
 
 ### Follow logs
 ```bash
-docker compose logs -f
+docker compose --profile dev logs -f
 ```
 
 ### Rebuild image after code changes

@@ -3,7 +3,7 @@ name: vrun-fee
 
 networks:
   proxy:
-    name: ${PROXY_DOCKER_NETWORK:-vrun-db_proxy}
+    name: ${PROXY_DOCKER_NETWORK:-vrun-proxy}
     external: true
   validator:
     name: ${VALIDATOR_DOCKER_NETWORK:-vrun-db_default}
@@ -16,7 +16,16 @@ configs:
     file: signing.key
 
 services:
-  fee:
+  api-dev:
+    extends: api
+    container_name: ${COMPOSE_PROJECT_NAME}-dev
+    profiles:
+      - dev
+    networks:
+      - validator
+      - proxy
+
+  api:
     container_name: ${COMPOSE_PROJECT_NAME}
     user: ${FEE_USER:-fee}:${FEE_USER:-fee}
     env_file:
@@ -28,11 +37,12 @@ services:
         - FEE_USER=${FEE_USER:-fee}
       tags:
         - vrun-fee:local-dev
+    profiles:
+      - api
     ports:
       - 8082:${FEE_LISTEN_PORT:-8080}
     networks:
       - validator
-      - proxy
     configs:
       - source: dot-env
         target: /.env
@@ -40,7 +50,7 @@ services:
         target: /usr/share/fee/signing.key
     labels:
       - "traefik.enable=true"
-      - "traefik.http.services.vrun-fee.loadbalancer.server.scheme=http"
-      - "traefik.http.routers.vrun-fee.rule=PathPrefix(`/fee/`)"
-      - "traefik.http.routers.vrun-fee.middlewares=vrun-fee-strip-prefixes"
-      - "traefik.http.middlewares.vrun-fee-strip-prefixes.stripprefix.prefixes=/fee"
+      - "traefik.http.services.vrun-fee-api.loadbalancer.server.scheme=http"
+      - "traefik.http.routers.vrun-fee-api.rule=PathPrefix(`/fee/`)"
+      - "traefik.http.routers.vrun-fee-api.middlewares=vrun-fee-api-strip-prefixes"
+      - "traefik.http.middlewares.vrun-fee-api-strip-prefixes.stripprefix.prefixes=/fee"
