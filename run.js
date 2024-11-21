@@ -210,7 +210,7 @@ app.get(`/:chainId(\\d+)/prices`,
   }
 )
 
-const eip712DomainForChain = chainId => ({name: 'vrün', version: '1', chainId})
+const eip712DomainForChain = chainId => ({name: 'vrün', version: '1', chainId: parseInt(chainId)})
 const eip712DomainType = [
     {name: 'name',    type: 'string'},
     {name: 'version', type: 'string'},
@@ -236,7 +236,7 @@ const creditAccountTypes = {
     { type: "uint256", name: "tokenChainId" },
     { type: "address", name: "tokenAddress" },
     { type: "bytes32", name: "transactionHash" },
-    { type: "string" , name: "reason" }
+    { type: "string" , name: "comment" }
   ]
 }
 
@@ -272,7 +272,7 @@ app.post(`/:chainId(\\d+)/:address(${addressRe})/pay`,
       const provider = providers[chainId]
       if (!provider) return fail(res, 404, 'unknown chainId')
       const domain = eip712DomainForChain(chainId)
-      const {signature, ...data} = req.body
+      const {signature, data} = req.body
       let signingAddress
       try {
         signingAddress = ethers.verifyTypedData(domain, payTypes, data, signature)
@@ -282,9 +282,9 @@ app.post(`/:chainId(\\d+)/:address(${addressRe})/pay`,
         console.debug(data)
         return fail(res, 400, `could not verify signed data: ${e.message}`)
       }
-      const txChainId = data.chainId
-      const txProvider = providers[txChainId]
-      const feeReceiver = feeReceivers[txChainId]
+      const tokenChainId = data.tokenChainId
+      const txProvider = providers[tokenChainId]
+      const feeReceiver = feeReceivers[tokenChainId]
       if (!(txProvider && feeReceiver)) return fail(res, 400, 'unknown chainId for transaction')
       const tx = await txProvider.getTransaction(data.transactionHash)
       if (!tx) return fail(res, 400, 'transaction not found')
@@ -347,12 +347,12 @@ app.post(`/:chainId(\\d+)/:address(${addressRe})/pay`,
         tokenChainId,
         tokenAddress,
         transactionHash: tx.hash,
-        reason: `submitted to ${apiUrl}`
+        comment: `submitted to ${apiUrl}`
       }
-      const creditAccountSignature = signer.signTypedData(domain, creditAccountTypes, creditAccountData)
+      const creditAccountSignature = await signer.signTypedData(domain, creditAccountTypes, creditAccountData)
       console.debug(`Created creditAccountSignature: ${creditAccountSignature}`)
 
-      const body = JSON.stringify({ type: 'CreditAccount', creditAccountData, creditAccountSignature })
+      const body = JSON.stringify({ type: 'CreditAccount', data: creditAccountData, signature: creditAccountSignature })
       const success = await fetch(`${apiUrl}/${chainId}/${nodeAccount}/credit`,
         {method: 'POST', headers: {'Content-Type': 'application/json'}, body}
       ).then(async r =>
