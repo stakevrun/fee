@@ -2,8 +2,36 @@ import { ethers } from 'ethers'
 import express from 'express'
 import { readFileSync } from 'node:fs'
 
+const curDateTime = () => Intl.DateTimeFormat(
+  'en-GB',
+  { dateStyle: 'short', timeStyle: 'medium' }
+).format(Date.now())
+
+// Override stdout and stderr message output with time and type prefix
+const log_level = (process.env.LOG_LEVEL || 'info').toLowerCase();
+['debug', 'info', 'warn', 'error'].map((methodName) => {
+  const originalLoggingMethod = console[methodName];
+  console[methodName] = (firstArgument, ...otherArguments) => {
+    if (
+      (methodName === 'error') ||
+      (methodName === 'warn' && ['warn', 'info', 'debug'].some((level) => level === log_level)) ||
+      (methodName === 'info' && ['info', 'debug'].some((level) => level === log_level)) ||
+      (methodName === 'debug' && log_level === 'debug')
+    ) {
+      const prefix = `${curDateTime()} | ${methodName.toUpperCase()} | `;
+      if (typeof firstArgument === 'string') {
+        originalLoggingMethod(prefix + firstArgument, ...otherArguments);
+      } else {
+        originalLoggingMethod(prefix, firstArgument, ...otherArguments);
+      }
+    }
+  };
+});
+process.setUncaughtExceptionCaptureCallback((e) => console.error(e.message + '\n' + e.stack))
+
+const apiUrl = process.env.API_URL || 'https://api.vrün.com'
 const signer = new ethers.Wallet(readFileSync('signing.key').toString('hex'))
-signer.getAddress().then((address) => console.log(`Using signer account: ${address}`))
+signer.getAddress().then((address) => console.info(`Using signer account: ${address} and API server url: ${apiUrl}.`))
 
 const nullAddress = '0x'.padEnd(42, '0')
 
@@ -143,7 +171,7 @@ for (const [chainId, provider] of Object.entries(providers)) {
     const block = await provider.getBlock('finalized')
     const slotNumber = timestampToSlot(chainId, block.timestamp)
     if (finalizedSlotNumberByChain[chainId] != slotNumber) {
-      console.log(`${timestamp()}: ${chainId}: finalized slot: ${slotNumber}`)
+      console.info(`${chainId}: finalized slot: ${slotNumber}`)
       finalizedSlotNumberByChain[chainId] = slotNumber
     }
   })
@@ -163,6 +191,7 @@ const addressRegExp = new RegExp(addressRe)
 const pubkeyRe = '0x[0-9a-fA-F]{96}'
 
 const fail = (res, statusCode, body) => {
+  console.warn(`Request failed with status code ${statusCode} and message: ${body}`)
   res.status(statusCode).send(body)
 }
 
@@ -182,6 +211,12 @@ app.get(`/:chainId(\\d+)/prices`,
 )
 
 const eip712DomainForChain = chainId => ({name: 'vrün', version: '1', chainId})
+const eip712DomainType = [
+    {name: 'name',    type: 'string'},
+    {name: 'version', type: 'string'},
+    {name: 'chainId', type: 'uint256'}
+  ]
+
 const payTypes = {
   Pay: [
     {name: 'nodeAccount',     type: 'address'},
@@ -243,6 +278,8 @@ app.post(`/:chainId(\\d+)/:address(${addressRe})/pay`,
         signingAddress = ethers.verifyTypedData(domain, payTypes, data, signature)
       }
       catch (e) {
+        console.warn(`Failed verifyTypedData with signature ${signature}`)
+        console.debug(data)
         return fail(res, 400, `could not verify signed data: ${e.message}`)
       }
       const txChainId = data.chainId
@@ -251,7 +288,11 @@ app.post(`/:chainId(\\d+)/:address(${addressRe})/pay`,
       if (!(txProvider && feeReceiver)) return fail(res, 400, 'unknown chainId for transaction')
       const tx = await txProvider.getTransaction(data.transactionHash)
       if (!tx) return fail(res, 400, 'transaction not found')
-      if (signingAddress !== tx.from) return fail(res, 400, 'signature not by transaction sender')
+      if (signingAddress !== tx.from) {
+        console.warn(`Invalid pay transaction signature submitted.`)
+        console.debug(`Got signingAddress [${signingAddress}] but the transaction from address is [${tx.from}].`)
+        return fail(res, 400, 'signature not by transaction sender')
+      }
       if (tx.to !== data.tokenAddress && !(tx.to === feeReceiver && data.tokenAddress === nullAddress))
         return fail(res, 400, 'not a payment transaction')
       const getTransferValue = async () => {
@@ -273,29 +314,46 @@ app.post(`/:chainId(\\d+)/:address(${addressRe})/pay`,
       const tokenAddress = data.tokenAddress.toLowerCase()
       const price = prices[ethers.getAddress(tokenAddress)]
       if (!price) return fail(res, 400, `no price for token ${tokenAddress}`)
-      if (BigInt(price) * BigInt(data.numDays) !== transferValue)
+      if (BigInt(price) * BigInt(data.numDays) !== transferValue) {
+        console.debug(`The provided numDays [${data.numDays}] inconsistent with transfer value [${transferValue}].`)
+        console.debug(`With a days price of [${price}] the transfer value was expected to be [${(BigInt(price) * BigInt(data.numDays))}].`)
+        console.debug(`The total days bought with [${transferValue}] would be [${(BigInt(transferValue) / BigInt(price))}].`)
         return fail(res, 400, `numDays inconsistent with transfer value and price`)
+      }
+
       const nodeAccount = req.params.address
       const logs = await fetch(
-        `https://api.vrün.com/${chainId}/${nodeAccount}/credit/logs?hash=${tx.hash}`
-      ).then(res => res.json()).catch(e => fail(res, 400, `failed to fetch logs ${e.message}`))
+        `${apiUrl}/${chainId}/${nodeAccount}/credit/logs?hash=${tx.hash}`
+      ).then(res => res.json()).catch(e => {
+        console.debug(res)
+        return fail(res, 400, `failed to fetch logs ${e.message}`)
+      })
       if (!logs) return
-      if (logs.some(({tokenChainId: x, tokenAddress: y, transactionHash: z}) =>
-                    x == tokenChainId && y == tokenAddress && z == tx.hash))
+
+      if (logs.length && logs.some(
+        ({tokenChainId: x, tokenAddress: y, transactionHash: z}) => {
+          console.debug(`${x} === ${tokenChainId} && ${y} === ${tokenAddress} && ${z} === ${data.transactionHash}`);
+          return x === tokenChainId && y === tokenAddress && z === data.transactionHash
+        }
+      )) {
         return fail(res, 400, `credit log already exists`)
+      }
+
       const creditAccountData = {
         timestamp: Math.round(Date.now() / 1000),
         nodeAccount,
-        numDays: BigInt(data.numDays),
+        numDays: data.numDays,
         decreaseBalance: false,
         tokenChainId,
         tokenAddress,
         transactionHash: tx.hash,
-        reason: 'submitted to fee.vrün.com'
+        reason: `submitted to ${apiUrl}`
       }
       const creditAccountSignature = signer.signTypedData(domain, creditAccountTypes, creditAccountData)
+      console.debug(`Created creditAccountSignature: ${creditAccountSignature}`)
+
       const body = JSON.stringify({ type: 'CreditAccount', creditAccountData, creditAccountSignature })
-      const success = await fetch(`https://api.vrün.com/${chainId}/${nodeAccount}/credit`,
+      const success = await fetch(`${apiUrl}/${chainId}/${nodeAccount}/credit`,
         {method: 'POST', headers: {'Content-Type': 'application/json'}, body}
       ).then(async r =>
               r.status === 201 ||
@@ -320,7 +378,7 @@ app.get(`/:chainId(\\d+)/:address(${addressRe})/credits`,
       balanceByAddress[address] ||= {length: 0, numDays: 0}
       const creditAccountLogs = creditAccountLogsByAddress[address]
       const balance = balanceByAddress[address]
-      const creditAccountLogCount = await fetch(`https://api.vrün.com/${chainId}/${address}/credit/length`).then(async r => {
+      const creditAccountLogCount = await fetch(`${apiUrl}/${chainId}/${address}/credit/length`).then(async r => {
         if (r.status !== 200)
           return fail(res, r.status, `failed to fetch credit logs length: ${await r.text()}`)
         else return r.json()
@@ -329,7 +387,7 @@ app.get(`/:chainId(\\d+)/:address(${addressRe})/credits`,
         return res.headersSent || fail(res, 500, `failed to fetch credit logs length: ${creditAccountLogCount}`)
       if (creditAccountLogCount > creditAccountLogs.length) {
         const numMissing = creditAccountLogs.length - creditAccountLogCount
-        const moreLogsRes = await fetch(`https://api.vrün.com/${chainId}/${address}/credit/logs?start=${numMissing}`)
+        const moreLogsRes = await fetch(`${apiUrl}/${chainId}/${address}/credit/logs?start=${numMissing}`)
         if (moreLogsRes.status !== 200)
           return fail(res, moreLogsRes.status, `failed to fetch credit logs: ${await moreLogsRes.text()}`)
         const moreLogs = await moreLogsRes.json()
@@ -383,7 +441,7 @@ app.get(`/:chainId(\\d+)/:address(${addressRe})/:pubkey(${pubkeyRe})/charges`,
       const setEnabledLogsByPubkey = setEnabledLogsByAddress[address]
       setEnabledLogsByPubkey[pubkey] ||= []
       const setEnabledLogs = setEnabledLogsByPubkey[pubkey]
-      const setEnabledLogCount = await fetch(`https://api.vrün.com/${chainId}/${address}/${pubkey}/length?type=SetEnabled`).then(async r => {
+      const setEnabledLogCount = await fetch(`${apiUrl}/${chainId}/${address}/${pubkey}/length?type=SetEnabled`).then(async r => {
         if (r.status !== 200)
           return fail(res, r.status, `failed to fetch logs length: ${await r.text()}`)
         else return r.json()
@@ -392,7 +450,7 @@ app.get(`/:chainId(\\d+)/:address(${addressRe})/:pubkey(${pubkeyRe})/charges`,
         return res.headersSent || fail(res, 500, `failed to fetch logs length: ${setEnabledLogCount}`)
       if (setEnabledLogCount > setEnabledLogs.length) {
         const numMissing = setEnabledLogs.length - setEnabledLogCount
-        const moreLogsRes = await fetch(`https://api.vrün.com/${chainId}/${address}/${pubkey}/logs?type=SetEnabled&start=${numMissing}`)
+        const moreLogsRes = await fetch(`${apiUrl}/${chainId}/${address}/${pubkey}/logs?type=SetEnabled&start=${numMissing}`)
         if (moreLogsRes.status !== 200)
           return fail(res, moreLogsRes.status, `failed to fetch logs: ${await moreLogsRes.text()}`)
         const moreLogs = await moreLogsRes.json()
