@@ -1,5 +1,7 @@
 {
   "name": "vrün-fee",
+  "version": "0.0.2",
+  "license": "GPL-3.0-or-later",
   "type": "module",
   "dependencies": {
     "ethers": "6",
