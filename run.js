@@ -119,7 +119,7 @@ const rocketStorageFactories = {
 
 const timestamp = () => Intl.DateTimeFormat('en-GB',
     {year: 'numeric', month: 'short', day: '2-digit',
-     hour: '2-digit', minute: '2-digit', second: '2-digit'}
+    hour: '2-digit', minute: '2-digit', second: '2-digit'}
   ).format(new Date())
 
 const providers = {
@@ -135,9 +135,9 @@ const beaconUrls = {
 const port = process.env.PORT || 8080
 
 const feeReceivers = {
-         1: '0x99E2b1FB1085C392b9091A5505b0Ac27979501F8',
-     42161: '0x99E2b1FB1085C392b9091A5505b0Ac27979501F8',
-     17000: '0x99E2b1FB1085C392b9091A5505b0Ac27979501F8',
+  1: '0x99E2b1FB1085C392b9091A5505b0Ac27979501F8',
+  42161: '0x99E2b1FB1085C392b9091A5505b0Ac27979501F8',
+  17000: '0x99E2b1FB1085C392b9091A5505b0Ac27979501F8',
   11155111: '0x99E2b1FB1085C392b9091A5505b0Ac27979501F8',
 }
 
