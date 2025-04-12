@@ -117,7 +117,7 @@ const getSmoothingPoolAddress = rocketStorage => rocketStorage['getAddress(bytes
 const rocketStorageFactories = {
        1: new ethers.Contract('0x1d8f8f00cfa6758d7bE78336684788Fb0ee0Fa46', rocketStorageABI),
    17000: new ethers.Contract('0x594Fb75D3dc2DFa0150Ad03F99F97817747dd4E1', rocketStorageABI),
-  560048: new ethers.Contract('0x8a7FB51dAdF638058fBB3f7357c6b5dFbCd2687C', rocketStorageABI),
+  560048: new ethers.Contract('0x594Fb75D3dc2DFa0150Ad03F99F97817747dd4E1', rocketStorageABI),
 }
 
 const timestamp = () => Intl.DateTimeFormat('en-GB',
