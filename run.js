@@ -82,8 +82,8 @@ const getPriceTimestamp = t => {
 }
 
 const genesisTimes = {
-       1: 1606824023,
-   17000: 1695902400,
+  1: 1606824023,
+  17000: 1695902400,
   560048: 1742213400,
 }
 const secondsPerSlot = 12
