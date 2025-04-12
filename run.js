@@ -57,6 +57,7 @@ const pricesUntilTimestamp = {
       // TODO: deploy Safe and add Base
       // TODO: deplay Safe and add Optimism
     },
+    // TODO: add Hoodi payment options and prices
     // Holesky
     17000: {
       // Holesky
@@ -81,8 +82,9 @@ const getPriceTimestamp = t => {
 }
 
 const genesisTimes = {
-  1: 1606824023,
-  17000: 1695902400
+       1: 1606824023,
+   17000: 1695902400,
+  560048: 1742213400,
 }
 const secondsPerSlot = 12
 const slotsPerEpoch = 32
@@ -113,8 +115,9 @@ const rocketSmoothingPoolKey = ethers.id('contract.addressrocketSmoothingPool')
 const getSmoothingPoolAddress = rocketStorage => rocketStorage['getAddress(bytes32)'](rocketSmoothingPoolKey)
 
 const rocketStorageFactories = {
-  1: new ethers.Contract('0x1d8f8f00cfa6758d7bE78336684788Fb0ee0Fa46', rocketStorageABI),
-  17000: new ethers.Contract('0x594Fb75D3dc2DFa0150Ad03F99F97817747dd4E1', rocketStorageABI)
+       1: new ethers.Contract('0x1d8f8f00cfa6758d7bE78336684788Fb0ee0Fa46', rocketStorageABI),
+   17000: new ethers.Contract('0x594Fb75D3dc2DFa0150Ad03F99F97817747dd4E1', rocketStorageABI),
+  560048: new ethers.Contract('0x8a7FB51dAdF638058fBB3f7357c6b5dFbCd2687C', rocketStorageABI),
 }
 
 const timestamp = () => Intl.DateTimeFormat('en-GB',
@@ -123,47 +126,55 @@ const timestamp = () => Intl.DateTimeFormat('en-GB',
   ).format(new Date())
 
 const providers = {
-  1: new ethers.JsonRpcProvider(process.env.RPC_MAINNET || 'http://localhost:8545'),
-  17000: new ethers.JsonRpcProvider(process.env.RPC_HOLESKY || 'http://localhost:8546')
+       1: new ethers.JsonRpcProvider(process.env.RPC_MAINNET || 'http://localhost:8545'),
+   17000: new ethers.JsonRpcProvider(process.env.RPC_HOLESKY || 'http://localhost:8546'),
+  560048: new ethers.JsonRpcProvider(process.env.RPC_HOODI   || 'http://localhost:8546'),
 }
 
 const beaconUrls = {
-  1: process.env.BN_MAINNET || 'http://localhost:5052',
-  17000: process.env.BN_HOLESKY || 'http://localhost:5053'
+       1: process.env.BN_MAINNET || 'http://localhost:5052',
+   17000: process.env.BN_HOLESKY || 'http://localhost:5053',
+  560048: process.env.BN_HOODI   || 'http://localhost:5053',
 }
 
 const port = process.env.PORT || 8080
 
 const feeReceivers = {
-  1: '0x99E2b1FB1085C392b9091A5505b0Ac27979501F8',
-  42161: '0x99E2b1FB1085C392b9091A5505b0Ac27979501F8',
-  17000: '0x99E2b1FB1085C392b9091A5505b0Ac27979501F8',
+         1: '0x99E2b1FB1085C392b9091A5505b0Ac27979501F8',
+     42161: '0x99E2b1FB1085C392b9091A5505b0Ac27979501F8',
+     17000: '0x99E2b1FB1085C392b9091A5505b0Ac27979501F8',
+  // TODO: deploy Hoodi fee receiver and add here
   11155111: '0x99E2b1FB1085C392b9091A5505b0Ac27979501F8',
 }
 
 const setEnabledLogsByChainAndAddress = {
-  1: {},
-  17000: {}
+       1: {},
+   17000: {},
+  560048: {},
 }
 
 const creditAccountLogsByChainAndAddress = {
-  1: {},
-  17000: {}
+       1: {},
+   17000: {},
+  560048: {},
 }
 
 const balanceByChainAndAddress = {
-  1: {},
-  17000: {}
+       1: {},
+   17000: {},
+  560048: {},
 }
 
 const beaconIntervalByChainAndPubkey = {
-  1: {},
-  17000: {}
+       1: {},
+   17000: {},
+  560048: {},
 }
 
 const finalizedSlotNumberByChain = {
-  1: 0,
-  17000: 0
+       1: 0,
+   17000: 0,
+  560048: 0,
 }
 
 for (const [chainId, provider] of Object.entries(providers)) {
